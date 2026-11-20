@@ -27,6 +27,16 @@ async def dev_test_page() -> FileResponse:
     return FileResponse(_STATIC_DIR / "dev-test.html")
 
 
+@app.get("/downloads/vocl-release.apk", include_in_schema=False)
+async def download_release_apk() -> FileResponse:
+    # Explicit Android MIME type prevents mobile browsers from appending .zip
+    return FileResponse(
+        path=_STATIC_DIR / "downloads" / "vocl-release.apk",
+        media_type="application/vnd.android.package-archive",
+        filename="vocl-release.apk",
+    )
+
+
 app.mount("/", StaticFiles(directory=str(_STATIC_DIR), html=True), name="static")
 
 ensure_csv_exists()
