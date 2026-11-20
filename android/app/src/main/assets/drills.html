@@ -6,7 +6,11 @@
 <title>Vocl · Drills</title>
 <link rel="stylesheet" href="css/vocl-theme.css">
 <style>
-  .top-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-top: 6px; }
+  .brand-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 2px; }
+  .brand-lockup { display: flex; align-items: center; gap: 9px; }
+  .brand-logo { width: 26px; height: 26px; border-radius: 7px; border: 1px solid #242428; }
+  .brand-name { font-size: 16px; font-weight: 700; letter-spacing: -0.02em; color: #FFFFFF; }
+  .top-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
   .hero-headline { font-size: 28px; font-weight: 700; line-height: 1.15; letter-spacing: -0.03em; color: #FFFFFF; }
 
   .featured-card {
@@ -67,9 +71,16 @@
 <body>
 
 <main class="page">
+  <div class="brand-bar">
+    <div class="brand-lockup">
+      <img class="brand-logo" src="img/vocl-logo.png" alt="Vocl logo">
+      <span class="brand-name">Vocl</span>
+    </div>
+    <div class="streak-pill" id="streak-pill">Ready</div>
+  </div>
+
   <header class="top-row">
     <h1 class="hero-headline">Think it.<br>Say it. Defend it.</h1>
-    <div class="streak-pill" id="streak-pill">Ready</div>
   </header>
 
   <section class="featured-card" id="featured-card" onclick="openFeatured()">

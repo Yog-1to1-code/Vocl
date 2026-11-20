@@ -4,10 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Vocl — Think it. Say it. Defend it.</title>
+  <meta name="description" content="Practice technical interviews eyes-free on your commute. Lock your phone, talk through algorithms and system design out loud, and get real-time Socratic feedback." />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="apple-touch-icon" href="/vocl-logo.png" />
   <style>
     :root {
       --bg: #000000;
       --surface: #121214;
+      --surface-elevated: #18181C;
       --border: #242428;
       --green: #28D763;
       --amber: #FF9F0A;
@@ -15,179 +19,365 @@
       --blue-soft: #9AB8FF;
       --red: #FF453A;
       --text: #FFFFFF;
+      --text-secondary: #D4D4D8;
       --muted: #8E8E93;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+    html { scroll-behavior: smooth; }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding-bottom: 64px;
+      overflow-x: hidden;
     }
 
-    .mono { font-family: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, monospace; }
+    .mono { font-family: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, monospace; font-variant-numeric: tabular-nums; }
+    .container { width: 100%; max-width: 1080px; margin: 0 auto; padding: 0 24px; }
 
-    .hero {
-      width: 100%;
-      max-width: 720px;
-      padding: 64px 24px 40px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      text-align: center;
-      gap: 20px;
+    /* Sticky Top Nav */
+    .nav {
+      position: sticky; top: 0; z-index: 60;
+      background: rgba(0, 0, 0, 0.84);
+      backdrop-filter: blur(18px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     }
-
-    .status-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 14px;
-      border-radius: 9999px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--muted);
+    .nav-inner {
+      height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 20px;
     }
-
-    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); }
-    .dot.live { background: var(--green); box-shadow: 0 0 10px rgba(40, 215, 99, 0.7); }
-
     .brand {
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: var(--green);
+      display: inline-flex; align-items: center; gap: 11px;
+      text-decoration: none; color: var(--text); font-weight: 700; font-size: 19px; letter-spacing: -0.025em;
     }
-
-    h1 {
-      font-size: clamp(2.2rem, 5vw, 3.4rem);
-      font-weight: 700;
-      line-height: 1.08;
-      letter-spacing: -0.035em;
+    .brand img {
+      width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--border);
     }
-
-    .tagline {
-      max-width: 540px;
-      font-size: 1.08rem;
-      line-height: 1.55;
-      color: var(--muted);
+    .nav-links { display: flex; align-items: center; gap: 28px; }
+    .nav-links a {
+      color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 500;
+      transition: color 0.15s ease;
     }
-
-    .cta {
-      margin-top: 8px;
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      background: var(--green);
-      color: #000000;
-      text-decoration: none;
-      padding: 16px 28px;
-      border-radius: 16px;
-      font-size: 1rem;
-      font-weight: 700;
-      letter-spacing: -0.01em;
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 9px 16px; border-radius: 9999px;
+      background: var(--green); color: #000000; text-decoration: none;
+      font-size: 13.5px; font-weight: 700; letter-spacing: -0.01em;
       transition: transform 0.15s ease, opacity 0.15s ease;
     }
+    .nav-cta:hover { transform: translateY(-1px); opacity: 0.94; }
 
-    .cta:hover { transform: translateY(-2px); opacity: 0.94; }
+    /* Hero */
+    .hero {
+      position: relative; padding: 72px 0 80px;
+    }
+    .hero::before {
+      content: ""; position: absolute; top: -40px; left: 50%; transform: translateX(-50%);
+      width: 680px; height: 420px; pointer-events: none; z-index: 0;
+      background: radial-gradient(ellipse at center, rgba(40, 215, 99, 0.12) 0%, rgba(10, 132, 255, 0.06) 45%, rgba(0, 0, 0, 0) 75%);
+    }
+    .hero-grid {
+      position: relative; z-index: 1;
+      display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 48px; align-items: center;
+    }
+    .hero-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 20px; }
 
-    .arch-section {
-      width: 100%;
-      max-width: 880px;
-      padding: 20px 24px 0;
-      display: flex;
-      flex-direction: column;
-      gap: 18px;
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 14px; border-radius: 9999px;
+      background: var(--surface); border: 1px solid var(--border);
+      font-size: 12px; font-weight: 600; color: var(--muted);
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); }
+    .dot.live { background: var(--green); box-shadow: 0 0 10px rgba(40, 215, 99, 0.75); }
+
+    h1 {
+      font-size: clamp(2.5rem, 5.2vw, 3.9rem);
+      font-weight: 700; line-height: 1.05; letter-spacing: -0.04em;
+    }
+    h1 .accent { color: var(--green); }
+
+    .hero-sub {
+      font-size: 1.12rem; line-height: 1.58; color: var(--muted); max-width: 510px;
     }
 
-    .section-label {
-      text-align: center;
-      font-size: 11.5px;
-      font-weight: 600;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--muted);
+    .cta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 6px; }
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 10px;
+      padding: 16px 26px; border-radius: 16px;
+      background: var(--green); color: #000000; text-decoration: none;
+      font-size: 15.5px; font-weight: 700; letter-spacing: -0.01em;
+      transition: transform 0.15s ease, opacity 0.15s ease;
     }
-
-    .steps {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 16px;
+    .btn-primary:hover { transform: translateY(-2px); opacity: 0.94; }
+    .btn-secondary {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 16px 22px; border-radius: 16px;
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); text-decoration: none;
+      font-size: 15px; font-weight: 600;
+      transition: border-color 0.15s ease, transform 0.15s ease;
     }
+    .btn-secondary:hover { border-color: #3A3A42; transform: translateY(-1px); }
 
+    .hero-meta {
+      display: flex; flex-wrap: wrap; gap: 18px; margin-top: 4px;
+      font-size: 13px; color: #6E6E73;
+    }
+    .hero-meta span { display: inline-flex; align-items: center; gap: 6px; }
+
+    /* Interactive Phone Mockup */
+    .phone-wrap { display: flex; justify-content: center; }
+    .phone-frame {
+      width: 312px; border-radius: 40px; padding: 22px 20px 20px;
+      background: #060608; border: 1.5px solid #26262C;
+      box-shadow: 0 32px 80px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+      display: flex; flex-direction: column; align-items: center; gap: 18px;
+    }
+    .phone-notch { width: 84px; height: 5px; border-radius: 999px; background: #222228; }
+    .phone-header { text-align: center; display: flex; flex-direction: column; gap: 6px; }
+    .phone-prob { font-size: 12.5px; color: var(--muted); }
+    .phone-timer { font-size: 32px; font-weight: 700; letter-spacing: 0.02em; }
+    .phone-orb {
+      width: 154px; height: 154px; border-radius: 50%; position: relative;
+      display: flex; align-items: center; justify-content: center;
+      border: 1px solid rgba(40, 215, 99, 0.25);
+    }
+    .phone-orb-inner {
+      width: 118px; height: 118px; border-radius: 50%;
+      background: radial-gradient(circle at 50% 45%, #0B2818 0%, #041009 100%);
+      border: 1px solid rgba(40, 215, 99, 0.48);
+      box-shadow: 0 0 34px rgba(40, 215, 99, 0.20);
+      display: flex; align-items: center; justify-content: center; gap: 4px;
+    }
+    .wave-bar {
+      width: 3px; border-radius: 999px; background: var(--green);
+      animation: wave 1.6s ease-in-out infinite;
+    }
+    @keyframes wave { 0%, 100% { transform: scaleY(0.45); } 50% { transform: scaleY(1.1); } }
+    .phone-state { font-size: 10.5px; font-weight: 700; letter-spacing: 0.14em; color: var(--green); }
+    .phone-quote {
+      font-size: 13.5px; line-height: 1.42; text-align: center; color: #E5E5EA; padding: 0 6px;
+    }
+    .phone-pocket {
+      width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+      padding: 11px 13px; display: flex; align-items: center; gap: 10px;
+    }
+    .phone-pocket strong { display: block; font-size: 12px; color: #FFFFFF; }
+    .phone-pocket span { font-size: 11px; color: var(--muted); }
+
+    /* Sections */
+    section.block { padding: 64px 0; border-top: 1px solid rgba(255, 255, 255, 0.07); }
+    .section-head { text-align: center; max-width: 600px; margin: 0 auto 40px; display: flex; flex-direction: column; gap: 10px; }
+    .eyebrow { font-size: 11.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--green); }
+    h2 { font-size: clamp(1.75rem, 3.2vw, 2.35rem); font-weight: 700; letter-spacing: -0.03em; line-height: 1.15; }
+    .section-sub { font-size: 15.5px; color: var(--muted); line-height: 1.5; }
+
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
     .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 24px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+      padding: 26px; display: flex; flex-direction: column; gap: 12px;
+      transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+    .card:hover { border-color: #34343C; transform: translateY(-2px); }
+
+    .badge {
+      align-self: flex-start; padding: 4px 11px; border-radius: 9999px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+    }
+    .badge.green { background: rgba(40, 215, 99, 0.12); color: var(--green); }
+    .badge.blue { background: rgba(10, 132, 255, 0.14); color: var(--blue-soft); }
+    .badge.amber { background: rgba(255, 159, 10, 0.14); color: var(--amber); }
+
+    .card h3 { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
+    .card p { font-size: 14.5px; line-height: 1.55; color: var(--muted); }
+    .drill-meta { margin-top: auto; padding-top: 8px; font-size: 12px; color: #6E6E73; }
+
+    /* Bottom CTA Banner */
+    .cta-banner {
+      background: linear-gradient(135deg, rgba(40, 215, 99, 0.10) 0%, rgba(18, 18, 20, 1) 55%, rgba(10, 132, 255, 0.08) 100%);
+      border: 1px solid var(--border); border-radius: 26px;
+      padding: 48px 32px; text-align: center;
+      display: flex; flex-direction: column; align-items: center; gap: 16px;
+    }
+    .cta-banner img { width: 52px; height: 52px; border-radius: 14px; border: 1px solid var(--border); }
+    .cta-banner p { max-width: 480px; font-size: 15.5px; color: var(--muted); line-height: 1.5; }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid rgba(255, 255, 255, 0.07);
+      padding: 32px 0 44px;
+    }
+    .footer-inner {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px;
+      font-size: 13.5px; color: var(--muted);
     }
 
-    .step-badge {
-      align-self: flex-start;
-      padding: 4px 10px;
-      border-radius: 9999px;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.06em;
+    @media (max-width: 860px) {
+      .hero-grid { grid-template-columns: 1fr; text-align: center; }
+      .hero-copy { align-items: center; }
+      .cta-row, .hero-meta { justify-content: center; }
+      .grid-3 { grid-template-columns: 1fr; }
+      .nav-links { display: none; }
     }
-
-    .step-badge.s1 { background: rgba(10, 132, 255, 0.14); color: var(--blue-soft); }
-    .step-badge.s2 { background: rgba(255, 159, 10, 0.14); color: var(--amber); }
-    .step-badge.s3 { background: rgba(40, 215, 99, 0.14); color: var(--green); }
-
-    .card h3 { font-size: 1.08rem; font-weight: 700; letter-spacing: -0.02em; }
-    .card p { font-size: 0.92rem; line-height: 1.5; color: var(--muted); }
   </style>
 </head>
 <body>
-  <section class="hero">
-    <div class="status-pill mono">
-      <span class="dot" id="status-dot"></span>
-      <span id="status-text">Checking Cloud Run backend…</span>
+
+  <nav class="nav">
+    <div class="container nav-inner">
+      <a class="brand" href="#">
+        <img src="/vocl-logo.png" alt="Vocl logo" />
+        <span>Vocl</span>
+      </a>
+      <div class="nav-links">
+        <a href="#how-it-works">How it works</a>
+        <a href="#drills">Drills</a>
+        <a href="#pocket-mode">Pocket Mode</a>
+      </div>
+      <a class="nav-cta" href="/downloads/vocl-release.apk" download="vocl-release.apk">Get the App</a>
     </div>
-    <span class="brand mono">VOCL · POCKET MODE</span>
-    <h1>Think it. Say it. Defend it.</h1>
-    <p class="tagline">
-      Eyes-free technical interview simulator built for your commute. Talk through DSA, System Design, and DevOps trade-offs while Gemini verifies your Big-O complexity in real time.
-    </p>
-    <a class="cta" href="/downloads/vocl-release.apk" download="vocl-release.apk">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-      Download Vocl APK (Android)
-    </a>
+  </nav>
+
+  <header class="hero">
+    <div class="container hero-grid">
+      <div class="hero-copy">
+        <div class="status-pill mono">
+          <span class="dot" id="status-dot"></span>
+          <span id="status-text">Checking live voice engine…</span>
+        </div>
+        <h1>Think it.<br />Say it. <span class="accent">Defend it.</span></h1>
+        <p class="hero-sub">
+          Turn your daily commute into real technical interview prep. Lock your phone, talk through algorithms and system design out loud, and face Staff-level Socratic follow-ups—completely eyes-free.
+        </p>
+        <div class="cta-row">
+          <a class="btn-primary" href="/downloads/vocl-release.apk" download="vocl-release.apk">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            Download for Android (.apk)
+          </a>
+          <a class="btn-secondary" href="#how-it-works">See how it works</a>
+        </div>
+        <div class="hero-meta mono">
+          <span>&#10003; Android 8.0+</span>
+          <span>&#10003; Screen-off Pocket Mode</span>
+          <span>&#10003; Zero sign-up required</span>
+        </div>
+      </div>
+
+      <div class="phone-wrap">
+        <div class="phone-frame" aria-label="Vocl Pocket Mode Preview">
+          <div class="phone-notch"></div>
+          <div class="phone-header">
+            <span class="phone-prob">Longest Palindromic Substring</span>
+            <span class="phone-timer mono">04:18</span>
+          </div>
+          <div class="phone-orb">
+            <div class="phone-orb-inner">
+              <span class="wave-bar" style="height:16px;animation-delay:0.0s;"></span>
+              <span class="wave-bar" style="height:30px;animation-delay:0.1s;"></span>
+              <span class="wave-bar" style="height:46px;animation-delay:0.2s;"></span>
+              <span class="wave-bar" style="height:36px;animation-delay:0.3s;"></span>
+              <span class="wave-bar" style="height:52px;animation-delay:0.4s;"></span>
+              <span class="wave-bar" style="height:32px;animation-delay:0.5s;"></span>
+              <span class="wave-bar" style="height:18px;animation-delay:0.6s;"></span>
+            </div>
+          </div>
+          <span class="phone-state mono">LISTENING</span>
+          <p class="phone-quote">“That nested loop is O of N cubed. At ten to the five, how can you reuse palindrome checks?”</p>
+          <div class="phone-pocket">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#28D763" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
+            <div>
+              <strong>Safe to lock your screen.</strong>
+              <span>Audio stays live in your pocket.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <section class="block" id="how-it-works">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow mono">HOW IT WORKS</span>
+        <h2>Real interview rigor, zero keyboard.</h2>
+        <p class="section-sub">Great engineers can explain time complexity and architectural trade-offs clearly before writing a single line of code.</p>
+      </div>
+      <div class="grid-3">
+        <article class="card">
+          <span class="badge green mono">01 · PICK A DRILL</span>
+          <h3>Choose your challenge</h3>
+          <p>Review the constraints and target Big-O on the brief screen—across Data Structures, System Design, and DevOps incidents.</p>
+        </article>
+        <article class="card">
+          <span class="badge blue mono">02 · LOCK &amp; TALK</span>
+          <h3>Defend your approach live</h3>
+          <p>Drop your phone in your pocket. Vocl listens naturally, challenges weak complexity claims, and nudges you with Socratic questions.</p>
+        </article>
+        <article class="card">
+          <span class="badge amber mono">03 · AUTOPSY REPORT</span>
+          <h3>Inspect your grades</h3>
+          <p>Get an instant post-session breakdown across Correctness, Complexity Rigor, Edge-Case Coverage, and Communication clarity.</p>
+        </article>
+      </div>
+    </div>
   </section>
 
-  <section class="arch-section">
-    <div class="section-label mono">SYSTEM 1 + SYSTEM 2 ARCHITECTURE ON GOOGLE CLOUD RUN</div>
-    <div class="steps">
-      <article class="card">
-        <span class="step-badge s1 mono">STEP 01 · SYSTEM 1</span>
-        <h3>Gemini Live Voice Stream</h3>
-        <p>Persistent bidirectional 16 kHz / 24 kHz PCM WebSocket over Android ForegroundService handles natural speech, barge-in, and screen-off commute sessions.</p>
-      </article>
-      <article class="card">
-        <span class="step-badge s2 mono">STEP 02 · SYSTEM 2</span>
-        <h3>Non-Blocking Deep Verifier</h3>
-        <p>Asynchronous <code>evaluate_approach</code> tool calls run Gemini Reasoning in parallel to audit worst-case Big-O complexity, constraint limits, and missed edge cases.</p>
-      </article>
-      <article class="card">
-        <span class="step-badge s3 mono">STEP 03 · AUTOPSY</span>
-        <h3>Socratic Coaching &amp; Grades</h3>
-        <p>System 1 delivers targeted Socratic nudges via <code>WHEN_IDLE</code> scheduling and persists a full complexity autopsy report at session end.</p>
-      </article>
+  <section class="block" id="drills">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow mono">FEATURED DRILLS</span>
+        <h2>Built for the questions that actually matter.</h2>
+        <p class="section-sub">Every drill checks your worst-case complexity, boundary conditions, and production failure modes.</p>
+      </div>
+      <div class="grid-3">
+        <article class="card">
+          <span class="badge green mono">DSA · MEDIUM</span>
+          <h3>Longest Palindromic Substring</h3>
+          <p>Move past cubic brute force, defend O(N) vs. expand-from-center trade-offs, and handle even-length and repeated-character edge cases.</p>
+          <div class="drill-meta mono">10 min &bull; Target: O(N) / O(1)</div>
+        </article>
+        <article class="card">
+          <span class="badge blue mono">SYSTEM DESIGN · MEDIUM</span>
+          <h3>Design a Global URL Shortener</h3>
+          <p>Handle 100M monthly writes, 100:1 read-heavy caching, base-62 collision avoidance, and viral hot-key thundering herds under 50 ms p99.</p>
+          <div class="drill-meta mono">15 min &bull; Target: O(1) read / write</div>
+        </article>
+        <article class="card">
+          <span class="badge amber mono">DEVOPS · HARD</span>
+          <h3>Postgres at 99% CPU</h3>
+          <p>Triage a 4-vCPU Cloud SQL primary with p99 latency spiking to 3.2 s—distinguish lock contention, table bloat, and runaway queries.</p>
+          <div class="drill-meta mono">10 min &bull; Runbook triage</div>
+        </article>
+      </div>
     </div>
   </section>
+
+  <section class="block" id="pocket-mode">
+    <div class="container">
+      <div class="cta-banner">
+        <img src="/vocl-logo.png" alt="Vocl logo" />
+        <h2>Ready for your next commute?</h2>
+        <p>Install Vocl on Android, put in your earbuds, and run a 10-minute voice interview right now.</p>
+        <a class="btn-primary" href="/downloads/vocl-release.apk" download="vocl-release.apk">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          Download Vocl APK (3.4 MB)
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container footer-inner">
+      <a class="brand" href="#" style="font-size:15px;">
+        <img src="/vocl-logo.png" alt="Vocl logo" style="width:24px;height:24px;border-radius:6px;" />
+        <span>Vocl</span>
+      </a>
+      <span>Eyes-free technical interview simulator &bull; Powered by Gemini Live</span>
+    </div>
+  </footer>
 
   <script>
     (async () => {
@@ -198,9 +388,9 @@
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
         dot.classList.add('live');
-        text.textContent = 'Backend Online (' + (data.ai_mode === 'live' ? 'Live Gemini' : 'Mock Mode') + ')';
+        text.textContent = data.ai_mode === 'live' ? 'Live Voice Engine Online' : 'Voice Engine Online (Demo)';
       } catch {
-        text.textContent = 'Backend Offline';
+        text.textContent = 'Voice Engine Connecting…';
       }
     })();
   </script>
