@@ -1,0 +1,188 @@
+package com.vocl.app;
+
+import android.Manifest;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.pm.PackageManager;
+import android.os.Build;
+import android.os.Bundle;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.Toast;
+
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+
+public class MainActivity extends AppCompatActivity {
+
+    private static final int PERMISSION_REQUEST_CODE = 100;
+    private WebView webView;
+
+    private final BroadcastReceiver stateReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String status = intent.getStringExtra(VoclAudioService.EXTRA_STATUS);
+            pushStateToWebView(status);
+        }
+    };
+
+    private final BroadcastReceiver autopsyReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String json = intent.getStringExtra(VoclAudioService.EXTRA_AUTOPSY);
+            pushAutopsyToWebView(json);
+        }
+    };
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        webView = new WebView(this);
+        setContentView(webView);
+
+        configureWebView();
+        requestPermissions();
+
+        webView.loadUrl("file:///android_asset/drills.html");
+    }
+
+    private void configureWebView() {
+        webView.setBackgroundColor(0xFF000000);
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setMediaPlaybackRequiresUserGesture(false);
+        settings.setAllowFileAccess(true);
+
+        webView.addJavascriptInterface(new VoclBridge(), "VoclNative");
+
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                if (url.startsWith("file:///android_asset/")) {
+                    view.loadUrl(url);
+                    return true;
+                }
+                return false;
+            }
+        });
+    }
+
+    private void requestPermissions() {
+        String[] permissions;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions = new String[]{
+                    Manifest.permission.RECORD_AUDIO,
+                    Manifest.permission.POST_NOTIFICATIONS
+            };
+        } else {
+            permissions = new String[]{Manifest.permission.RECORD_AUDIO};
+        }
+
+        boolean allGranted = true;
+        for (String perm : permissions) {
+            if (ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) {
+                allGranted = false;
+                break;
+            }
+        }
+
+        if (!allGranted) {
+            ActivityCompat.requestPermissions(this, permissions, PERMISSION_REQUEST_CODE);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
+                                           @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == PERMISSION_REQUEST_CODE) {
+            for (int result : grantResults) {
+                if (result != PackageManager.PERMISSION_GRANTED) {
+                    Toast.makeText(this, "Microphone permission is required for interviews",
+                            Toast.LENGTH_LONG).show();
+                    break;
+                }
+            }
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        IntentFilter stateFilter = new IntentFilter(VoclAudioService.BROADCAST_STATE);
+        IntentFilter autopsyFilter = new IntentFilter(VoclAudioService.BROADCAST_AUTOPSY);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(stateReceiver, stateFilter, Context.RECEIVER_NOT_EXPORTED);
+            registerReceiver(autopsyReceiver, autopsyFilter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(stateReceiver, stateFilter);
+            registerReceiver(autopsyReceiver, autopsyFilter);
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        unregisterReceiver(stateReceiver);
+        unregisterReceiver(autopsyReceiver);
+    }
+
+    private void pushStateToWebView(String status) {
+        runOnUiThread(() -> webView.evaluateJavascript(
+                "window.onVoclStateChange && window.onVoclStateChange('" + status + "')", null));
+    }
+
+    private void pushAutopsyToWebView(String json) {
+        // Escape for safe embedding in JS string literal
+        String escaped = json.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n");
+        runOnUiThread(() -> webView.evaluateJavascript(
+                "window.onVoclSessionComplete && window.onVoclSessionComplete(JSON.parse('" + escaped + "'))", null));
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (webView.canGoBack()) {
+            webView.goBack();
+        } else {
+            super.onBackPressed();
+        }
+    }
+
+    // Exposed to JavaScript as window.VoclNative
+    public class VoclBridge {
+
+        @JavascriptInterface
+        public void startSession(String problemId) {
+            if (ContextCompat.checkSelfPermission(MainActivity.this,
+                    Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                runOnUiThread(() -> Toast.makeText(MainActivity.this,
+                        "Microphone permission required", Toast.LENGTH_SHORT).show());
+                return;
+            }
+
+            Intent intent = new Intent(MainActivity.this, VoclAudioService.class);
+            intent.putExtra(VoclAudioService.EXTRA_PROBLEM_ID, problemId);
+            ContextCompat.startForegroundService(MainActivity.this, intent);
+        }
+
+        @JavascriptInterface
+        public void stopSession() {
+            Intent intent = new Intent(MainActivity.this, VoclAudioService.class);
+            intent.setAction(VoclAudioService.ACTION_STOP_SESSION);
+            startService(intent);
+        }
+
+        @JavascriptInterface
+        public String getBackendUrl() {
+            return BackendConfig.BASE_HTTP_URL;
+        }
+    }
+}

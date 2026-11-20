@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>tailwind.config = { darkMode: "class", theme: { extend: { colors: { "surface": "#000000", "surface-variant": "#222226", "on-surface": "#f2f2f7", "primary": "#30d158", "primary-container": "#30d158", "secondary": "#aac7ff", "secondary-container": "#3e90ff", "tertiary": "#ffa11a", "error": "#ff453a", "outline": "#38383a", "outline-variant": "#2a2a2d", "on-surface-variant": "#8e8e93", "surface-container-high": "#1c1c1e", "surface-container": "#141416" }, fontFamily: { mono: ["JetBrains Mono", "SF Mono", "monospace"] } } } }</script>
+<style>
+  *{-webkit-font-smoothing:antialiased;margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Inter",sans-serif;background:#000;color:#f2f2f7;min-height:100vh;overflow-x:hidden}
+  ::-webkit-scrollbar{display:none}
+  .font-mono{font-family:"JetBrains Mono","SF Mono",monospace!important;font-variant-numeric:tabular-nums!important}
+</style>
+<script src="js/vocl-bridge.js"></script>
+</head>
+<body class="bg-black text-[#f2f2f7] antialiased flex flex-col min-h-screen select-none">
+
+<!-- Header -->
+<header class="fixed top-0 w-full z-50 bg-black/85 backdrop-blur-2xl border-b border-white/[0.08]">
+  <div class="h-14 px-4 flex items-center justify-between">
+    <div class="flex items-center gap-2.5">
+      <span class="text-[21px] font-bold text-white tracking-[-0.03em] uppercase">VOCL</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] border border-white/[0.08]">
+        <svg class="w-3.5 h-3.5 text-[#30d158]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 23c-4.97 0-9-3.96-9-8.83 0-3.32 1.84-6.31 4.59-8.88.42-.39 1.09-.27 1.34.25.75 1.54 1.76 2.82 2.76 3.66.23.2.58.11.69-.17.65-1.63 1.25-3.64 1.25-6.03 0-.58.62-.97 1.13-.7 3.94 2.11 6.24 6.32 6.24 10.87C21 19.04 16.97 23 12 23z"></path></svg>
+        <span class="text-[12px] font-semibold text-white/90 tabular-nums tracking-tight font-mono">5d streak</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="flex-1 flex flex-col relative w-full pb-28 bg-black pt-16">
+  <div class="flex flex-col w-full max-w-lg mx-auto px-4 pb-8 gap-6 pt-2">
+
+    <!-- Hero Card — dynamic, loaded from backend -->
+    <section id="hero-card" class="relative overflow-hidden bg-[#121214] rounded-3xl p-6 border border-white/[0.09] flex flex-col gap-4 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.05] border border-white/[0.08]">
+          <svg class="w-3.5 h-3.5 text-[#30d158]" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2.5" viewBox="0 0 24 24"><path d="M4 12v-1M8 15V9M12 18V6M16 15V9M20 12v-1"></path></svg>
+          <span id="hero-duration" class="text-[11px] font-semibold text-white/80 tracking-wider uppercase font-mono">—</span>
+        </div>
+        <div id="hero-difficulty" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#ffa11a]/10 border border-[#ffa11a]/20">
+          <span class="w-1.5 h-1.5 rounded-full bg-[#ffa11a] shadow-[0_0_6px_rgba(255,161,26,0.6)]"></span>
+          <span class="text-[11px] font-semibold text-[#ffa11a] tracking-wider uppercase font-mono">—</span>
+        </div>
+      </div>
+      <!-- Fixed: flex-col gap prevents title/pill overlap on long titles -->
+      <div class="flex flex-col gap-3">
+        <h1 id="hero-title" class="text-[22px] font-bold text-white tracking-tight leading-snug">Loading…</h1>
+        <div class="flex items-center gap-2 flex-wrap">
+          <span id="hero-category" class="text-[12px] font-mono text-[#8e8e93] px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.06]">—</span>
+          <span id="hero-complexity" class="text-[12px] font-mono text-[#30d158]/90 font-medium">—</span>
+        </div>
+      </div>
+      <div class="flex items-center justify-end pt-1">
+        <button onclick="heroStartDrill()" class="h-12 px-6 rounded-full bg-white text-black text-[14px] font-bold flex items-center gap-2 active:scale-95 transition-all shadow-[0_4px_16px_rgba(255,255,255,0.18)] hover:bg-[#f2f2f7]">
+          <span>Start Drill</span>
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </button>
+      </div>
+    </section>
+
+    <!-- Drill list — populated dynamically -->
+    <div class="flex flex-col gap-2.5">
+      <div class="flex items-center justify-between px-1">
+        <span class="text-[12px] font-semibold text-[#8e8e93] uppercase tracking-wider">DRILLS</span>
+      </div>
+      <div id="drill-list" class="bg-[#121214] rounded-2xl border border-[#262629] overflow-hidden divide-y divide-[#262629] shadow-sm">
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>renderBottomNav('drills');</script>
+
+<script>
+var problems = [];
+var heroId = null;
+
+var diffColors = { Easy: '#30d158', Medium: '#ffa11a', Hard: '#ff453a' };
+var diffLabels = { Easy: 'EASY', Medium: 'MED', Hard: 'HARD' };
+
+function heroStartDrill() {
+  if (heroId) navigateTo('brief.html?id=' + heroId);
+}
+
+function loadProblems() {
+  var url = getBackendUrl() + '/api/problems';
+  fetch(url).then(function(r){ return r.json(); }).then(function(data) {
+    problems = data;
+    if (problems.length === 0) return;
+
+    var hero = problems[0];
+    heroId = hero.id;
+    document.getElementById('hero-title').textContent = hero.title;
+    document.getElementById('hero-duration').textContent = hero.duration_min + ' MIN';
+    document.getElementById('hero-category').textContent = hero.category;
+    document.getElementById('hero-complexity').textContent = hero.optimal_complexity;
+
+    var dColor = diffColors[hero.difficulty] || '#ffa11a';
+    var diffEl = document.getElementById('hero-difficulty');
+    diffEl.style.background = dColor + '1a';
+    diffEl.style.borderColor = dColor + '33';
+    diffEl.querySelector('span:first-child').style.background = dColor;
+    diffEl.querySelector('span:last-child').textContent = hero.difficulty;
+    diffEl.querySelector('span:last-child').style.color = dColor;
+
+    var list = document.getElementById('drill-list');
+    list.innerHTML = '';
+    for (var i = 1; i < problems.length; i++) {
+      var p = problems[i];
+      var c = diffColors[p.difficulty] || '#ffa11a';
+      var row = document.createElement('a');
+      row.onclick = (function(id){ return function(){ navigateTo('brief.html?id=' + id); }; })(p.id);
+      row.style.cssText = 'min-height:64px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer';
+      row.innerHTML =
+        '<div style="display:flex;flex-direction:column;min-width:0;padding-right:12px">' +
+          '<span style="font-size:15px;font-weight:500;color:white;letter-spacing:-0.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + p.title + '</span>' +
+          '<div style="display:flex;align-items:center;gap:8px;margin-top:4px">' +
+            '<span style="font-size:11px;font-weight:500;color:#8e8e93;padding:2px 6px;border-radius:4px;background:rgba(255,255,255,0.05)">' + p.category + '</span>' +
+            '<span style="font-size:12px;font-family:JetBrains Mono,monospace;color:#636366">' + p.duration_min + 'm</span>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:12px;flex-shrink:0">' +
+          '<div style="display:flex;align-items:center;gap:6px">' +
+            '<span style="font-size:11px;font-family:JetBrains Mono,monospace;color:' + c + ';font-weight:500">' + diffLabels[p.difficulty] + '</span>' +
+            '<span style="width:8px;height:8px;border-radius:50%;background:' + c + ';box-shadow:0 0 8px ' + c + '80"></span>' +
+          '</div>' +
+          '<svg style="width:16px;height:16px;color:#636366" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M8.25 4.5l7.5 7.5-7.5 7.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>' +
+        '</div>';
+      list.appendChild(row);
+    }
+  }).catch(function(e) {
+    document.getElementById('hero-title').textContent = 'Could not load problems';
+    console.error('Failed to fetch problems', e);
+  });
+}
+
+loadProblems();
+</script>
+</body>
+</html>

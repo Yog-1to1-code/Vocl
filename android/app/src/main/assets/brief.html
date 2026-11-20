@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@100..900&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>tailwind.config={darkMode:"class",theme:{extend:{colors:{"surface":"#0D0D10","surface-subtle":"#16161B","surface-card":"#1A1A22","on-surface":"#F2F2F5","primary":"#30D158","primary-dim":"#229C41","accent-blue":"#0A84FF","error-badge":"#FF453A","outline-subtle":"rgba(255,255,255,0.07)"},fontFamily:{mono:["JetBrains Mono","monospace"],sans:["-apple-system","BlinkMacSystemFont","SF Pro Display","SF Pro Text","Inter","sans-serif"]}}}}</script>
+<style>
+  *{-webkit-font-smoothing:antialiased;margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Inter",sans-serif;background:#0D0D10;color:#F2F2F5;min-height:100dvh}
+  .font-mono{font-family:"JetBrains Mono",monospace!important;font-variant-numeric:tabular-nums}
+  ::-webkit-scrollbar{display:none}
+</style>
+<script src="js/vocl-bridge.js"></script>
+</head>
+<body class="bg-[#0D0D10] text-[#F2F2F5] antialiased flex flex-col min-h-screen">
+
+<!-- Header -->
+<header class="sticky top-0 w-full z-50 bg-[#0D0D10]/85 backdrop-blur-2xl border-b border-white/[0.06]">
+  <div class="h-12 px-4 flex items-center justify-between">
+    <button onclick="navigateTo('drills.html')" class="w-10 h-10 -ml-1.5 flex items-center justify-center text-white/90 rounded-full active:bg-white/10 transition-colors z-10">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"></path></svg>
+    </button>
+    <div class="absolute inset-0 flex items-center justify-center pointer-events-none px-12">
+      <span id="header-title" class="text-[15px] font-semibold text-white tracking-tight truncate">Loading…</span>
+    </div>
+    <div class="flex items-center justify-end z-10">
+      <span id="header-time" class="flex items-center gap-1 font-mono text-[11px] text-white/50 tracking-wider">
+        <svg class="w-3 h-3 text-white/40" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+        <span id="header-duration">—</span>
+      </span>
+    </div>
+  </div>
+</header>
+
+<main class="flex-1 flex flex-col relative w-full px-4 pt-4 pb-28">
+  <div class="flex flex-col w-full space-y-4">
+    <div class="flex flex-col">
+      <div class="flex items-start gap-2.5 mb-2 justify-between w-full">
+        <h1 id="brief-title" class="text-[24px] font-bold text-white tracking-tight leading-tight pt-1">Loading…</h1>
+        <div class="flex flex-col items-end gap-1 shrink-0">
+          <span id="brief-difficulty" class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-mono font-bold tracking-wider bg-[#ffa11a]/15 text-[#ffa11a] border border-[#ffa11a]/30">—</span>
+        </div>
+      </div>
+      <p id="brief-statement" class="text-[15px] leading-[1.45] text-white/75">Loading problem details…</p>
+    </div>
+
+    <!-- Constraint cards -->
+    <div id="constraint-cards" class="grid grid-cols-3 gap-2"></div>
+
+    <!-- Edge cases -->
+    <details class="group bg-[#15151B] border border-white/[0.07] rounded-2xl p-4 transition-all duration-200">
+      <summary class="flex items-center justify-between gap-3 w-full cursor-pointer list-none select-none outline-none">
+        <span class="text-[11px] font-mono font-semibold uppercase text-white/80 tracking-wider">KEY EDGE CASES</span>
+        <svg class="w-4 h-4 text-white/45 group-open:text-[#30D158] transition-transform duration-200 group-open:rotate-180 shrink-0" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </summary>
+      <div id="edge-cases-list" class="pt-3.5 mt-3 border-t border-white/[0.08] space-y-3"></div>
+    </details>
+
+    <!-- Constraints list -->
+    <details class="group bg-[#15151B] border border-white/[0.07] rounded-2xl p-4 transition-all duration-200">
+      <summary class="flex items-center justify-between gap-3 w-full cursor-pointer list-none select-none outline-none">
+        <span class="text-[11px] font-mono font-semibold uppercase text-white/80 tracking-wider">CONSTRAINTS</span>
+        <svg class="w-4 h-4 text-white/45 group-open:text-[#30D158] transition-transform duration-200 group-open:rotate-180 shrink-0" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </summary>
+      <div id="constraints-list" class="pt-3.5 mt-3 border-t border-white/[0.08] space-y-3"></div>
+    </details>
+  </div>
+</main>
+
+<!-- Start button dock -->
+<div class="fixed bottom-0 left-0 right-0 z-50 px-4 pt-3 pb-8 bg-gradient-to-t from-[#0D0D10] via-[#0D0D10]/90 to-transparent backdrop-blur-md flex flex-col items-center">
+  <button id="start-session-btn" onclick="beginSession()" class="w-full h-[56px] bg-white text-black font-semibold text-[16px] rounded-full flex items-center justify-center gap-2.5 active:scale-[0.985] hover:bg-neutral-100 transition-all shadow-[0_4px_24px_rgba(255,255,255,0.12)] cursor-pointer">
+    <svg class="w-5 h-5 text-black shrink-0" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.3" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" x2="12" y1="19" y2="22"></line></svg>
+    <span>Start Audio Session</span>
+  </button>
+</div>
+
+<script>
+var problemId = getQueryParam('id');
+
+var diffColors = { Easy: '#30d158', Medium: '#ffa11a', Hard: '#ff453a' };
+
+function beginSession() {
+  if (!problemId) return;
+  startSession(problemId);
+  navigateTo('live.html?id=' + problemId);
+}
+
+function loadProblem() {
+  if (!problemId) {
+    document.getElementById('brief-title').textContent = 'No problem selected';
+    return;
+  }
+  fetch(getBackendUrl() + '/api/problems/' + problemId)
+    .then(function(r){ return r.json(); })
+    .then(function(p) {
+      document.getElementById('header-title').textContent = p.title;
+      document.getElementById('header-duration').textContent = p.duration_min + ' min';
+      document.getElementById('brief-title').textContent = p.title;
+      document.getElementById('brief-statement').textContent = p.statement;
+
+      var dc = diffColors[p.difficulty] || '#ffa11a';
+      var diffEl = document.getElementById('brief-difficulty');
+      diffEl.textContent = p.difficulty.toUpperCase();
+      diffEl.style.color = dc;
+      diffEl.style.background = dc + '26';
+      diffEl.style.borderColor = dc + '4d';
+
+      // Constraint cards
+      var cards = document.getElementById('constraint-cards');
+      cards.innerHTML = '';
+      [{label:'CONSTRAINTS',value:p.constraints.length+' rules',border:'rgba(255,255,255,0.07)',color:'white'},
+       {label:'TARGET',value:p.optimal_complexity.split(' ')[0]||p.optimal_complexity,border:'rgba(48,209,88,0.2)',color:'#30D158'},
+       {label:'DURATION',value:p.duration_min+'m',border:'rgba(255,255,255,0.07)',color:'white'}
+      ].forEach(function(item){
+        var d=document.createElement('div');
+        d.className='bg-[#15151B] rounded-xl p-3 flex flex-col items-center justify-center text-center';
+        d.style.border='1px solid '+item.border;
+        d.innerHTML='<span class="text-[10px] font-mono uppercase tracking-wider mb-1" style="color:rgba(255,255,255,0.4)">'+item.label+'</span><span class="font-mono text-[14px] font-medium" style="color:'+item.color+'">'+item.value+'</span>';
+        cards.appendChild(d);
+      });
+
+      // Edge cases
+      var ecList = document.getElementById('edge-cases-list');
+      ecList.innerHTML = '';
+      p.key_edge_cases.forEach(function(ec){
+        var d=document.createElement('div');d.className='flex items-start gap-3';
+        d.innerHTML='<div class="w-5 h-5 rounded-full bg-[#0A84FF]/15 text-[#0A84FF] flex items-center justify-center shrink-0 mt-0.5"><svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg></div><p class="text-[13px] leading-snug text-white/90">'+ec+'</p>';
+        ecList.appendChild(d);
+      });
+
+      // Constraints
+      var cList = document.getElementById('constraints-list');
+      cList.innerHTML = '';
+      p.constraints.forEach(function(c){
+        var d=document.createElement('div');d.className='flex items-start gap-3';
+        d.innerHTML='<div class="w-5 h-5 rounded-full bg-[#30D158]/15 text-[#30D158] flex items-center justify-center shrink-0 mt-0.5"><svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 12h14M13 5l7 7-7 7"></path></svg></div><p class="text-[13px] leading-snug text-white/90 font-mono">'+c+'</p>';
+        cList.appendChild(d);
+      });
+    })
+    .catch(function(e) {
+      document.getElementById('brief-title').textContent = 'Failed to load problem';
+      console.error(e);
+    });
+}
+
+loadProblem();
+</script>
+</body>
+</html>

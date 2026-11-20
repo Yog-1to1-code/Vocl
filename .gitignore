@@ -1,0 +1,22 @@
+# Vocl
+
+*.iml
+.gradle/
+local.properties
+.idea/
+*.class
+*.log
+*.apk
+*.aab
+*.ap_
+*.dex
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+output.json
+__pycache__/
+*.pyc
+.env
+data/sessions.csv
+.DS_Store
