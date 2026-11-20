@@ -27,10 +27,7 @@
   .stat-val { font-size: 22px; font-weight: 700; color: #FFFFFF; line-height: 1.1; }
   .stat-lbl { font-size: 12px; color: var(--muted); }
 
-  .pref-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .pref-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-  .pref-title { font-size: 15px; font-weight: 600; color: #FFFFFF; }
-  .pref-sub { font-size: 12.5px; color: var(--muted); word-break: break-all; }
+  .pref-sub { font-size: 13px; color: var(--muted); line-height: 1.45; }
 
   .reset-btn {
     width: 100%; height: 48px; border-radius: 14px;
@@ -48,7 +45,7 @@
 <main class="page">
   <header class="top-row">
     <h1 class="page-title">Profile</h1>
-    <p class="page-sub">Pocket mode &amp; live engine controls.</p>
+    <p class="page-sub">Pocket mode ready.</p>
   </header>
 
   <section class="card">
@@ -74,43 +71,8 @@
   </section>
 
   <section class="card">
-    <span class="card-label mono">PREFERENCES</span>
-
-    <div class="pref-row">
-      <div class="pref-info">
-        <span class="pref-title">Interviewer style</span>
-        <span class="pref-sub" id="style-desc">Targeted Socratic nudges</span>
-      </div>
-      <div class="segmented" role="group" aria-label="Interviewer style">
-        <button class="segmented-btn active" id="style-socratic" onclick="setInterviewerStyle('Socratic')">Socratic</button>
-        <button class="segmented-btn" id="style-strict" onclick="setInterviewerStyle('Strict')">Strict</button>
-      </div>
-    </div>
-
-    <div class="divider"></div>
-
-    <div class="pref-row">
-      <div class="pref-info">
-        <span class="pref-title">Pocket mode wake lock</span>
-        <span class="pref-sub">Active &bull; Screen-off audio enabled</span>
-      </div>
-      <span class="pill live mono"><span class="status-dot"></span>ON</span>
-    </div>
-
-    <div class="divider"></div>
-
-    <div class="pref-row">
-      <div class="pref-info">
-        <span class="pref-title">Backend status</span>
-        <span class="pref-sub mono" id="backend-host">—</span>
-      </div>
-      <span class="pill offline mono" id="health-pill"><span class="status-dot"></span>Checking</span>
-    </div>
-  </section>
-
-  <section class="card">
-    <span class="card-label mono">DEMO CONTROLS</span>
-    <p class="pref-sub">Clear recorded session rows from the backend CSV and local cache before a fresh run.</p>
+    <span class="card-label mono">SESSION HISTORY</span>
+    <p class="pref-sub">Clear all recorded interview sessions and reset your grades board.</p>
     <button class="reset-btn" id="reset-btn" onclick="resetDemoSessions()">Reset Demo Sessions</button>
   </section>
 </main>
@@ -118,40 +80,6 @@
 <script>renderBottomNav('profile');</script>
 
 <script>
-function setInterviewerStyle(style) {
-  localStorage.setItem('voclInterviewerStyle', style);
-  var isSocratic = style === 'Socratic';
-  document.getElementById('style-socratic').classList.toggle('active', isSocratic);
-  document.getElementById('style-strict').classList.toggle('active', !isSocratic);
-  document.getElementById('style-desc').textContent = isSocratic
-    ? 'Targeted Socratic nudges'
-    : 'Direct FAANG complexity challenges';
-}
-
-function loadPreferences() {
-  var saved = localStorage.getItem('voclInterviewerStyle') || 'Socratic';
-  setInterviewerStyle(saved);
-  document.getElementById('backend-host').textContent = getBackendUrl();
-}
-
-function checkBackendHealth() {
-  var pill = document.getElementById('health-pill');
-  fetch(getBackendUrl() + '/api/health')
-    .then(function(res) {
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      return res.json();
-    })
-    .then(function(data) {
-      var mode = data && data.ai_mode === 'live' ? 'Live' : 'Mock';
-      pill.className = 'pill live mono';
-      pill.innerHTML = '<span class="status-dot"></span>Connected (' + escapeHtml(mode) + ')';
-    })
-    .catch(function() {
-      pill.className = 'pill offline mono';
-      pill.innerHTML = '<span class="status-dot"></span>Offline';
-    });
-}
-
 function loadSessionStats() {
   fetch(getBackendUrl() + '/api/sessions')
     .then(function(res) {
@@ -202,8 +130,6 @@ function resetDemoSessions() {
     });
 }
 
-loadPreferences();
-checkBackendHealth();
 loadSessionStats();
 </script>
 </body>

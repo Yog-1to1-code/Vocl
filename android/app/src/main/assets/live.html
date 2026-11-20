@@ -133,10 +133,11 @@
     </div>
 
     <div class="controls">
-      <button class="pause-btn" id="pause-btn" onclick="togglePauseMic()" aria-label="Pause microphone">
-        <svg id="pause-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>
+      <button type="button" class="pause-btn" id="pause-btn" onclick="togglePauseMic()" aria-label="Pause session">
+        <svg id="icon-pause" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>
+        <svg id="icon-play" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="display:none;"><polygon points="7 5 19 12 7 19 7 5"></polygon></svg>
       </button>
-      <button class="end-btn" id="end-btn" onclick="endInterview()">End &amp; grade</button>
+      <button type="button" class="end-btn" id="end-btn" onclick="endInterview()">End &amp; grade</button>
     </div>
   </footer>
 </main>
@@ -183,19 +184,20 @@ function togglePauseMic() {
   setMicMuted(micPaused);
 
   var btn = document.getElementById('pause-btn');
-  var icon = document.getElementById('pause-icon');
+  var pauseIcon = document.getElementById('icon-pause');
+  var playIcon = document.getElementById('icon-play');
   btn.classList.toggle('paused', micPaused);
-  btn.setAttribute('aria-label', micPaused ? 'Resume microphone' : 'Pause microphone');
+  btn.setAttribute('aria-label', micPaused ? 'Resume session' : 'Pause session');
+  pauseIcon.style.display = micPaused ? 'none' : 'block';
+  playIcon.style.display = micPaused ? 'block' : 'none';
 
   if (micPaused) {
-    icon.innerHTML = '<polygon points="7 5 19 12 7 19 7 5" fill="currentColor" stroke="none"></polygon>';
-    document.getElementById('sub-status').textContent = 'MIC MUTED';
+    document.getElementById('sub-status').textContent = 'SESSION PAUSED';
     document.getElementById('orb-stage').className = 'orb-stage paused';
     document.getElementById('state-caption').textContent = 'PAUSED';
     document.getElementById('state-caption').style.color = '#FF9F0A';
-    document.getElementById('prompt-quote').textContent = '“Microphone muted. Tap resume when you are ready to continue.”';
+    document.getElementById('prompt-quote').textContent = '“Session paused. Tap play when you are ready to resume.”';
   } else {
-    icon.innerHTML = '<line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line>';
     document.getElementById('sub-status').textContent = 'IN CONVERSATION';
     window.onVoclStateChange(lastServerStatus);
   }

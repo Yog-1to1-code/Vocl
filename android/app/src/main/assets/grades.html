@@ -122,19 +122,21 @@
       </div>
     </section>
 
-    <section class="autopsy-header">
-      <div class="autopsy-top">
-        <h2 class="section-title" id="autopsy-heading">Latest autopsy</h2>
-        <span class="date-label" id="autopsy-date">No sessions yet</span>
+    <section class="card" id="autopsy-card">
+      <div class="autopsy-header">
+        <div class="autopsy-top">
+          <h2 class="section-title" id="autopsy-heading">Latest autopsy</h2>
+          <span class="date-label" id="autopsy-date">No sessions yet</span>
+        </div>
+        <div class="autopsy-prob-row">
+          <span class="autopsy-prob" id="autopsy-title">—</span>
+          <span class="autopsy-score mono" id="autopsy-score">--</span>
+        </div>
+        <div class="autopsy-meta" id="autopsy-meta">—</div>
       </div>
-      <div class="autopsy-prob-row">
-        <span class="autopsy-prob" id="autopsy-title">—</span>
-        <span class="autopsy-score mono" id="autopsy-score">--</span>
-      </div>
-      <div class="autopsy-meta" id="autopsy-meta">—</div>
-    </section>
 
-    <section class="card">
+      <div class="divider"></div>
+
       <span class="card-label mono">COMPLEXITY</span>
       <div class="complexity-grid">
         <div class="comp-col">
@@ -148,39 +150,42 @@
           <span class="comp-val optimal mono" id="optimal-complexity">—</span>
         </div>
       </div>
-    </section>
 
-    <section class="card" id="edge-cases-card" style="display:none;">
-      <span class="card-label mono">MISSED EDGE CASES</span>
-      <div class="edge-list" id="edge-cases-list"></div>
-    </section>
+      <div id="edge-cases-card" style="display:none;flex-direction:column;gap:10px;">
+        <div class="divider"></div>
+        <span class="card-label mono">MISSED EDGE CASES</span>
+        <div class="edge-list" id="edge-cases-list"></div>
+      </div>
 
-    <section class="stand-section">
-      <h2 class="section-title">Where you stand</h2>
+      <div class="divider"></div>
 
-      <div class="metric-row">
-        <span class="metric-name">Problem &amp; approach</span>
-        <div class="bar-track"><div class="bar-fill" id="bar-correctness" style="width:0%;background:#28D763;"></div></div>
-        <span class="metric-val mono" id="val-correctness" style="color:#28D763;">-/10</span>
-      </div>
-      <div class="metric-row">
-        <span class="metric-name">Complexity rigor</span>
-        <div class="bar-track"><div class="bar-fill" id="bar-complexity" style="width:0%;background:#0A84FF;"></div></div>
-        <span class="metric-val mono" id="val-complexity" style="color:#9AB8FF;">-/10</span>
-      </div>
-      <div class="metric-row">
-        <span class="metric-name">Edge-case coverage</span>
-        <div class="bar-track"><div class="bar-fill" id="bar-edge" style="width:0%;background:#FF9F0A;"></div></div>
-        <span class="metric-val mono" id="val-edge" style="color:#FF9F0A;">-/10</span>
-      </div>
-      <div class="metric-row">
-        <span class="metric-name">Communication</span>
-        <div class="bar-track"><div class="bar-fill" id="bar-comm" style="width:0%;background:#28D763;"></div></div>
-        <span class="metric-val mono" id="val-comm" style="color:#28D763;">-/10</span>
-      </div>
-    </section>
+      <div class="stand-section">
+        <span class="card-label mono">WHERE YOU STAND</span>
 
-    <section class="card">
+        <div class="metric-row">
+          <span class="metric-name">Problem &amp; approach</span>
+          <div class="bar-track"><div class="bar-fill" id="bar-correctness" style="width:0%;background:#28D763;"></div></div>
+          <span class="metric-val mono" id="val-correctness" style="color:#28D763;">-/10</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-name">Complexity rigor</span>
+          <div class="bar-track"><div class="bar-fill" id="bar-complexity" style="width:0%;background:#0A84FF;"></div></div>
+          <span class="metric-val mono" id="val-complexity" style="color:#9AB8FF;">-/10</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-name">Edge-case coverage</span>
+          <div class="bar-track"><div class="bar-fill" id="bar-edge" style="width:0%;background:#FF9F0A;"></div></div>
+          <span class="metric-val mono" id="val-edge" style="color:#FF9F0A;">-/10</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-name">Communication</span>
+          <div class="bar-track"><div class="bar-fill" id="bar-comm" style="width:0%;background:#28D763;"></div></div>
+          <span class="metric-val mono" id="val-comm" style="color:#28D763;">-/10</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
       <span class="next-label mono">NEXT TIME</span>
       <p class="next-text" id="next-time-text">Complete your first audio session to get targeted coaching on complexity and missed edge cases.</p>
     </section>

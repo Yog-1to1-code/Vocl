@@ -165,7 +165,9 @@ public class VoclAudioService extends Service {
 
             @Override
             public void onMessage(WebSocket ws, ByteString bytes) {
-                audioEngine.writePlaybackData(bytes.toByteArray());
+                if (!micMuted) {
+                    audioEngine.writePlaybackData(bytes.toByteArray());
+                }
             }
 
             @Override
