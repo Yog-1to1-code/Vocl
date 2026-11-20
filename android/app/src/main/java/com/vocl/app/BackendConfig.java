@@ -2,12 +2,11 @@ package com.vocl.app;
 
 public final class BackendConfig {
 
-    // Toggle USE_TLS to true and update HOST for Cloud Run production
-    private static final boolean USE_TLS = false;
-    private static final String HOST = "10.0.2.2:8080";
-
-    public static final String BASE_HTTP_URL = (USE_TLS ? "https://" : "http://") + HOST;
-    public static final String BASE_WS_URL  = (USE_TLS ? "wss://" : "ws://")   + HOST;
+    // Populated per Gradle flavor (prod -> https/wss vocl.onrender.com, local -> http/ws 127.0.0.1:8080)
+    public static final String BASE_HTTP_URL =
+            (BuildConfig.USE_TLS ? "https://" : "http://") + BuildConfig.BACKEND_HOST;
+    public static final String BASE_WS_URL =
+            (BuildConfig.USE_TLS ? "wss://" : "ws://") + BuildConfig.BACKEND_HOST;
 
     private BackendConfig() {}
 }

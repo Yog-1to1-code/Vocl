@@ -7,6 +7,7 @@ local.properties
 *.class
 *.log
 *.apk
+!static/downloads/vocl-release.apk
 *.aab
 *.ap_
 *.dex
