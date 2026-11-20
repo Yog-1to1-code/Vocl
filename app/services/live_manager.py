@@ -40,6 +40,8 @@ MOCK_TURN_TRIGGER_BYTES = UPSTREAM_SAMPLE_RATE * 2 * 2  # ~2s of 16kHz 16-bit mo
 
 _BEHAVIOR_NON_BLOCKING = getattr(getattr(types, "Behavior", None), "NON_BLOCKING", None)
 _SCHEDULING_INTERRUPT = getattr(getattr(types, "FunctionResponseScheduling", None), "INTERRUPT", None)
+# WHEN_IDLE delivers the verdict as soon as the candidate stops talking instead of cutting them off
+_TOOL_RESPONSE_SCHEDULING = getattr(getattr(types, "FunctionResponseScheduling", None), "WHEN_IDLE", None) or _SCHEDULING_INTERRUPT
 
 _declaration_kwargs = {
     "name": "evaluate_approach",
@@ -299,8 +301,8 @@ class LiveSessionManager(SessionBridge):
                 "name": call.name,
                 "response": evaluation.model_dump(),
             }
-            if _SCHEDULING_INTERRUPT is not None:
-                resp_kwargs["scheduling"] = _SCHEDULING_INTERRUPT
+            if _TOOL_RESPONSE_SCHEDULING is not None:
+                resp_kwargs["scheduling"] = _TOOL_RESPONSE_SCHEDULING
             response = types.FunctionResponse(**resp_kwargs)
             await session.send_tool_response(function_responses=[response])
         except asyncio.CancelledError:

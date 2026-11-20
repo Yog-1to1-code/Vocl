@@ -77,7 +77,7 @@ async def evaluate_candidate_approach(problem: Problem, user_approach_summary: s
         "response_mime_type": "application/json",
         "response_schema": Evaluation,
         "temperature": 0.1,
-        "max_output_tokens": 512,
+        "max_output_tokens": 200,
     }
     # Use MINIMAL thinking on Gemini 3.x flash-lite (thinking_budget=0 returns 400 on 3.x)
     if "flash-lite" in GEMINI_REASONING_MODEL and hasattr(types, "ThinkingConfig"):

@@ -35,7 +35,7 @@ CHUNK_BYTES = 3200         # 100ms of 16kHz 16-bit mono PCM
 CHUNK_INTERVAL_SEC = 0.1
 TRAILING_SILENCE_SEC = 3.0
 GREETING_TIMEOUT_SEC = 20.0
-POST_SPEECH_TIMEOUT_SEC = 15.0
+POST_SPEECH_TIMEOUT_SEC = 20.0
 
 
 def _resample_16k_to_24k(pcm_16k: bytes, state: tuple | None) -> tuple[bytes, tuple]:
@@ -126,6 +126,8 @@ async def run_interruption_test() -> None:
         "tool_result": None,
         "ai_interrupt_start": None,
         "ai_interrupt_end": None,
+        "counter_start": None,
+        "counter_end": None,
     }
     tool_verdict: dict | None = None
     autopsy: dict | None = None
@@ -154,6 +156,12 @@ async def run_interruption_test() -> None:
                             timeline["ai_interrupt_start"] = now
                             log("AI interruption audio STARTED")
                         timeline["ai_interrupt_end"] = now
+                        # Counter-question = first AI audio after System 2 verdict
+                        if timeline["tool_result"] is not None and not post_interrupt_done.is_set():
+                            if timeline["counter_start"] is None:
+                                timeline["counter_start"] = now
+                                log("Counter-question audio STARTED")
+                            timeline["counter_end"] = now
                     continue
 
                 frame = json.loads(msg)
@@ -167,8 +175,8 @@ async def run_interruption_test() -> None:
                         if not greeting_done.is_set() and timeline["greeting_start"] is not None:
                             timeline["greeting_end"] = now
                             greeting_done.set()
-                        elif timeline["ai_interrupt_start"] is not None:
-                            timeline["ai_interrupt_end"] = now
+                        elif timeline["counter_start"] is not None:
+                            timeline["counter_end"] = now
                             post_interrupt_done.set()
                     elif status == "analyzing" and timeline["analyzing"] is None:
                         timeline["analyzing"] = now
@@ -242,6 +250,7 @@ async def run_interruption_test() -> None:
     duration_sec = write_stereo_mix_wav(MIX_WAV_PATH, user_chunks, ai_chunks)
 
     # ── Synchronized Timeline Summary ─────────────────────────────────────────
+    user_end_ts = timeline["user_speech_end"]
     fmt = lambda v: f"+{v:05.2f}s" if v is not None else "   N/A "
     print("\n" + "=" * 68)
     print("SYNCHRONIZED TWO-WAY INTERRUPTION TIMELINE")
@@ -254,6 +263,12 @@ async def run_interruption_test() -> None:
     print(f"  AI interruption start    : {fmt(timeline['ai_interrupt_start'])}")
     print(f"  User speech end          : {fmt(timeline['user_speech_end'])}")
     print(f"  AI interruption end      : {fmt(timeline['ai_interrupt_end'])}")
+    print(f"  Counter-question start   : {fmt(timeline['counter_start'])}")
+    print(f"  Counter-question end     : {fmt(timeline['counter_end'])}")
+    if timeline["analyzing"] is not None and timeline["tool_result"] is not None:
+        print(f"  System 2 latency         : {timeline['tool_result'] - timeline['analyzing']:.2f}s")
+    if timeline["counter_start"] is not None and user_end_ts is not None:
+        print(f"  Gap (user end -> counter): {timeline['counter_start'] - user_end_ts:+.2f}s")
     print("-" * 68)
 
     ai_start = timeline["ai_interrupt_start"]
