@@ -15,7 +15,10 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -37,15 +40,35 @@ public class VoclAudioService extends Service {
 
     private static final String CHANNEL_ID = "vocl_live_session";
 
+    // Shared snapshot so MainActivity can re-sync UI after screen unlock
+    private static volatile boolean sessionActive;
+    private static volatile String currentStatus;
+    private static volatile String lastAutopsyJson;
+
     private PowerManager.WakeLock wakeLock;
     private AudioStreamEngine audioEngine;
     private OkHttpClient httpClient;
     private WebSocket webSocket;
     private Thread captureThread;
+    private ExecutorService shutdownExecutor;
     private volatile boolean isRunning;
+    private final AtomicBoolean isEnding = new AtomicBoolean(false);
 
     private CountDownLatch autopsyLatch;
-    private String autopsyJson;
+
+    public static boolean isSessionActive() {
+        return sessionActive;
+    }
+
+    @Nullable
+    public static String getCurrentStatus() {
+        return currentStatus;
+    }
+
+    @Nullable
+    public static String getLastAutopsyJson() {
+        return lastAutopsyJson;
+    }
 
     @Nullable
     @Override
@@ -61,6 +84,7 @@ public class VoclAudioService extends Service {
                 .readTimeout(0, TimeUnit.MILLISECONDS)
                 .build();
         audioEngine = new AudioStreamEngine();
+        shutdownExecutor = Executors.newSingleThreadExecutor();
     }
 
     @Override
@@ -68,7 +92,7 @@ public class VoclAudioService extends Service {
         if (intent == null) return START_NOT_STICKY;
 
         if (ACTION_STOP_SESSION.equals(intent.getAction())) {
-            endSession();
+            endSessionAsync();
             return START_NOT_STICKY;
         }
 
@@ -88,9 +112,12 @@ public class VoclAudioService extends Service {
     }
 
     private void startAudioSession(String problemId) {
+        isEnding.set(false);
         isRunning = true;
+        sessionActive = true;
+        currentStatus = "connecting";
+        lastAutopsyJson = null;
         autopsyLatch = new CountDownLatch(1);
-        autopsyJson = null;
 
         audioEngine.initCapture();
         audioEngine.initPlayback();
@@ -157,7 +184,6 @@ public class VoclAudioService extends Service {
                     broadcastState(msg.optString("status", "listening"));
                     break;
                 case "autopsy":
-                    autopsyJson = text;
                     broadcastAutopsy(text);
                     if (autopsyLatch != null) autopsyLatch.countDown();
                     break;
@@ -169,32 +195,38 @@ public class VoclAudioService extends Service {
         }
     }
 
-    private void endSession() {
-        if (!isRunning) return;
+    private void endSessionAsync() {
+        if (!isEnding.compareAndSet(false, true)) return;
         isRunning = false;
 
-        if (webSocket != null) {
-            try {
-                webSocket.send("{\"type\":\"end_session\"}");
-            } catch (Exception e) {
-                Log.w(TAG, "Failed to send end_session", e);
-            }
-
-            // Wait up to 5s for autopsy response
-            if (autopsyLatch != null) {
+        // Run autopsy wait off main thread so UI never freezes
+        shutdownExecutor.execute(() -> {
+            WebSocket activeSocket = webSocket;
+            if (activeSocket != null) {
                 try {
-                    autopsyLatch.await(5, TimeUnit.SECONDS);
-                } catch (InterruptedException ignored) {}
+                    activeSocket.send("{\"type\":\"end_session\"}");
+                } catch (Exception e) {
+                    Log.w(TAG, "Failed to send end_session", e);
+                }
+
+                CountDownLatch latch = autopsyLatch;
+                if (latch != null) {
+                    try {
+                        latch.await(5, TimeUnit.SECONDS);
+                    } catch (InterruptedException ignored) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+
+                activeSocket.close(1000, "session ended");
             }
-
-            webSocket.close(1000, "session ended");
-        }
-
-        cleanupSession();
+            cleanupSession();
+        });
     }
 
     private void cleanupSession() {
         isRunning = false;
+        sessionActive = false;
         audioEngine.release();
         releaseWakeLock();
         stopForeground(STOP_FOREGROUND_REMOVE);
@@ -202,6 +234,7 @@ public class VoclAudioService extends Service {
     }
 
     private void broadcastState(String status) {
+        currentStatus = status;
         Intent intent = new Intent(BROADCAST_STATE);
         intent.setPackage(getPackageName());
         intent.putExtra(EXTRA_STATUS, status);
@@ -209,6 +242,8 @@ public class VoclAudioService extends Service {
     }
 
     private void broadcastAutopsy(String json) {
+        lastAutopsyJson = json;
+        sessionActive = false;
         Intent intent = new Intent(BROADCAST_AUTOPSY);
         intent.setPackage(getPackageName());
         intent.putExtra(EXTRA_AUTOPSY, json);
@@ -246,7 +281,16 @@ public class VoclAudioService extends Service {
 
     @Override
     public void onDestroy() {
-        endSession();
+        isRunning = false;
+        sessionActive = false;
+        if (webSocket != null) {
+            webSocket.close(1000, "service destroyed");
+        }
+        audioEngine.release();
+        releaseWakeLock();
+        if (shutdownExecutor != null) {
+            shutdownExecutor.shutdownNow();
+        }
         super.onDestroy();
     }
 }

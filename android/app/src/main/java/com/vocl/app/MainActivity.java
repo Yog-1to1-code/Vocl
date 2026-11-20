@@ -23,12 +23,15 @@ public class MainActivity extends AppCompatActivity {
 
     private static final int PERMISSION_REQUEST_CODE = 100;
     private WebView webView;
+    private String deliveredAutopsyJson;
 
     private final BroadcastReceiver stateReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             String status = intent.getStringExtra(VoclAudioService.EXTRA_STATUS);
-            pushStateToWebView(status);
+            if (status != null) {
+                pushStateToWebView(status);
+            }
         }
     };
 
@@ -36,7 +39,10 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onReceive(Context context, Intent intent) {
             String json = intent.getStringExtra(VoclAudioService.EXTRA_AUTOPSY);
-            pushAutopsyToWebView(json);
+            if (json != null) {
+                deliveredAutopsyJson = json;
+                pushAutopsyToWebView(json);
+            }
         }
     };
 
@@ -71,6 +77,12 @@ public class MainActivity extends AppCompatActivity {
                     return true;
                 }
                 return false;
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                syncServiceStateToWebView();
             }
         });
     }
@@ -126,6 +138,7 @@ public class MainActivity extends AppCompatActivity {
             registerReceiver(stateReceiver, stateFilter);
             registerReceiver(autopsyReceiver, autopsyFilter);
         }
+        syncServiceStateToWebView();
     }
 
     @Override
@@ -135,13 +148,26 @@ public class MainActivity extends AppCompatActivity {
         unregisterReceiver(autopsyReceiver);
     }
 
+    private void syncServiceStateToWebView() {
+        if (VoclAudioService.isSessionActive()) {
+            String status = VoclAudioService.getCurrentStatus();
+            if (status != null) {
+                pushStateToWebView(status);
+            }
+        }
+        String latestAutopsy = VoclAudioService.getLastAutopsyJson();
+        if (latestAutopsy != null && !latestAutopsy.equals(deliveredAutopsyJson)) {
+            deliveredAutopsyJson = latestAutopsy;
+            pushAutopsyToWebView(latestAutopsy);
+        }
+    }
+
     private void pushStateToWebView(String status) {
         runOnUiThread(() -> webView.evaluateJavascript(
                 "window.onVoclStateChange && window.onVoclStateChange('" + status + "')", null));
     }
 
     private void pushAutopsyToWebView(String json) {
-        // Escape for safe embedding in JS string literal
         String escaped = json.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n");
         runOnUiThread(() -> webView.evaluateJavascript(
                 "window.onVoclSessionComplete && window.onVoclSessionComplete(JSON.parse('" + escaped + "'))", null));
@@ -168,6 +194,7 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
 
+            deliveredAutopsyJson = null;
             Intent intent = new Intent(MainActivity.this, VoclAudioService.class);
             intent.putExtra(VoclAudioService.EXTRA_PROBLEM_ID, problemId);
             ContextCompat.startForegroundService(MainActivity.this, intent);

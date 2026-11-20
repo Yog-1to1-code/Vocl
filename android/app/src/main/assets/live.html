@@ -1,55 +1,249 @@
 <!DOCTYPE html>
-<html class="dark" lang="en">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Vocl · Pocket Mode</title>
 <style>
-  *{margin:0;padding:0;box-sizing:border-box;-webkit-font-smoothing:antialiased}
-  body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",sans-serif;background:#000;color:#f2f2f7;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:32px;padding:24px}
-  .orb{width:120px;height:120px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#a29bfe,#6C5CE7);box-shadow:0 0 60px rgba(108,92,231,0.4);transition:all 0.6s ease}
-  .orb.listening{background:radial-gradient(circle at 30% 30%,#a29bfe,#6C5CE7);box-shadow:0 0 60px rgba(108,92,231,0.4);animation:pulse 3s ease-in-out infinite}
-  .orb.speaking{background:radial-gradient(circle at 30% 30%,#6cff82,#30d158);box-shadow:0 0 80px rgba(48,209,88,0.5);animation:pulse 1.5s ease-in-out infinite}
-  .orb.analyzing{background:radial-gradient(circle at 30% 30%,#ffb868,#ffa11a);box-shadow:0 0 80px rgba(255,161,26,0.5);animation:spin 2s linear infinite}
-  @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
-  @keyframes spin{0%{transform:rotate(0deg) scale(1)}50%{transform:rotate(180deg) scale(1.05)}100%{transform:rotate(360deg) scale(1)}}
-  .status-label{font-size:14px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:#8e8e93;transition:color 0.3s}
-  .stop-btn{margin-top:24px;padding:16px 40px;border:none;border-radius:9999px;background:#ff453a;color:white;font-size:16px;font-weight:700;cursor:pointer;transition:all 0.2s}
-  .stop-btn:active{transform:scale(0.95);opacity:0.9}
+  :root {
+    --bg: #000000;
+    --surface: #141416;
+    --surface-border: #242428;
+    --green: #28D763;
+    --blue: #248AF8;
+    --blue-soft: #8CB6FF;
+    --amber: #F5A623;
+    --red: #F05248;
+    --text: #FFFFFF;
+    --muted: #8E8E93;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
+    height: 100%; min-height: 100dvh; overflow: hidden;
+  }
+  .mono { font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+  .screen {
+    max-width: 520px; height: 100dvh; margin: 0 auto;
+    padding: 28px 22px calc(24px + env(safe-area-inset-bottom, 0px));
+    display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+  }
+
+  .header { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
+  .problem-name { font-size: 15px; font-weight: 500; color: var(--muted); }
+  .timer { font-size: 46px; font-weight: 700; letter-spacing: 0.02em; color: #FFFFFF; line-height: 1; }
+  .sub-status { font-size: 11px; font-weight: 600; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; }
+
+  .orb-area { display: flex; flex-direction: column; align-items: center; gap: 26px; text-align: center; width: 100%; }
+
+  .orb-stage {
+    position: relative; width: 248px; height: 248px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ring-outer {
+    position: absolute; inset: 0; border-radius: 50%;
+    border: 1px solid rgba(36, 138, 248, 0.24);
+    transition: border-color 0.4s ease, transform 0.6s ease;
+  }
+  .ring-mid {
+    position: absolute; inset: 18px; border-radius: 50%;
+    border: 1px solid rgba(36, 138, 248, 0.48);
+    transition: border-color 0.4s ease, transform 0.6s ease;
+  }
+  .orb-core {
+    position: relative; width: 178px; height: 178px; border-radius: 50%;
+    background: radial-gradient(circle at 50% 45%, #0B1D36 0%, #050E1B 100%);
+    display: flex; align-items: center; justify-content: center; gap: 5px;
+    transition: background 0.4s ease, box-shadow 0.4s ease;
+  }
+
+  /* State themes */
+  .orb-stage.speaking .ring-outer { border-color: rgba(36, 138, 248, 0.26); animation: breathe 2.2s ease-in-out infinite; }
+  .orb-stage.speaking .ring-mid { border-color: rgba(36, 138, 248, 0.55); animation: breathe 2.2s ease-in-out infinite 0.2s; }
+  .orb-stage.speaking .orb-core { background: radial-gradient(circle at 50% 45%, #0D2240 0%, #050E1B 100%); box-shadow: 0 0 42px rgba(36, 138, 248, 0.18); }
+  .orb-stage.speaking .bar { background: var(--blue); animation: waveSpeak 1.1s ease-in-out infinite; }
+
+  .orb-stage.listening .ring-outer { border-color: rgba(40, 215, 99, 0.24); animation: breathe 3s ease-in-out infinite; }
+  .orb-stage.listening .ring-mid { border-color: rgba(40, 215, 99, 0.52); }
+  .orb-stage.listening .orb-core { background: radial-gradient(circle at 50% 45%, #0A2616 0%, #041009 100%); box-shadow: 0 0 42px rgba(40, 215, 99, 0.16); }
+  .orb-stage.listening .bar { background: var(--green); animation: waveListen 1.8s ease-in-out infinite; }
+
+  .orb-stage.analyzing .ring-outer { border-color: rgba(245, 166, 35, 0.28); animation: breathe 1.4s ease-in-out infinite; }
+  .orb-stage.analyzing .ring-mid { border-color: rgba(245, 166, 35, 0.58); }
+  .orb-stage.analyzing .orb-core { background: radial-gradient(circle at 50% 45%, #2A1C07 0%, #120B02 100%); box-shadow: 0 0 42px rgba(245, 166, 35, 0.18); }
+  .orb-stage.analyzing .bar { background: var(--amber); animation: waveAnalyze 0.9s ease-in-out infinite; }
+
+  .bar { width: 3.5px; border-radius: 9999px; background: var(--blue); transform-origin: center; }
+  @keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.03); } }
+  @keyframes waveSpeak { 0%, 100% { transform: scaleY(0.55); } 50% { transform: scaleY(1.12); } }
+  @keyframes waveListen { 0%, 100% { transform: scaleY(0.42); } 50% { transform: scaleY(0.82); } }
+  @keyframes waveAnalyze { 0%, 100% { transform: scaleY(0.45); opacity: 0.65; } 50% { transform: scaleY(1.0); opacity: 1; } }
+
+  .state-caption { font-size: 11.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--blue-soft); transition: color 0.3s ease; }
+  .prompt-quote { font-size: 20px; font-weight: 500; line-height: 1.38; color: #F2F2F7; max-width: 310px; min-height: 56px; }
+
+  .bottom-dock { width: 100%; display: flex; flex-direction: column; gap: 14px; }
+  .pocket-card {
+    background: var(--surface); border: 1px solid var(--surface-border); border-radius: 16px;
+    padding: 14px 16px; display: flex; align-items: center; gap: 14px;
+  }
+  .pocket-icon { color: var(--green); flex-shrink: 0; }
+  .pocket-title { font-size: 14px; font-weight: 600; color: #FFFFFF; }
+  .pocket-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+
+  .controls { display: flex; align-items: center; gap: 12px; width: 100%; }
+  .pause-btn {
+    width: 56px; height: 56px; border-radius: 16px; flex-shrink: 0;
+    background: #161618; border: 1px solid var(--surface-border); color: #FFFFFF;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+  }
+  .pause-btn:active { opacity: 0.75; }
+  .end-btn {
+    flex: 1; height: 56px; border-radius: 16px;
+    background: rgba(240, 82, 72, 0.06); border: 1.2px solid var(--red); color: var(--red);
+    font-size: 16px; font-weight: 700; cursor: pointer; transition: transform 0.15s ease, background 0.15s ease;
+  }
+  .end-btn:active { transform: scale(0.985); background: rgba(240, 82, 72, 0.16); }
+  .end-btn:disabled { opacity: 0.55; }
 </style>
 <script src="js/vocl-bridge.js"></script>
 </head>
 <body>
 
-<div class="orb listening" id="orb"></div>
-<span class="status-label" id="status-label">CONNECTING…</span>
-<button class="stop-btn" onclick="endInterview()">End Interview</button>
+<main class="screen">
+  <header class="header">
+    <div class="problem-name" id="problem-name">Technical Interview</div>
+    <div class="timer mono" id="timer">00:00</div>
+    <div class="sub-status mono" id="sub-status">IN CONVERSATION</div>
+  </header>
+
+  <section class="orb-area">
+    <div class="orb-stage listening" id="orb-stage">
+      <div class="ring-outer"></div>
+      <div class="ring-mid"></div>
+      <div class="orb-core" id="waveform"></div>
+    </div>
+    <div class="state-caption mono" id="state-caption">CONNECTING</div>
+    <p class="prompt-quote" id="prompt-quote">“Walk through your approach out loud before optimizing it.”</p>
+  </section>
+
+  <footer class="bottom-dock">
+    <div class="pocket-card">
+      <svg class="pocket-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
+      <div>
+        <div class="pocket-title">Safe to lock your screen.</div>
+        <div class="pocket-sub">Audio stays on. Keep thinking out loud.</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="pause-btn" id="pause-btn" onclick="togglePauseTimer()" aria-label="Pause indicator">
+        <svg id="pause-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="6" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="18"></line></svg>
+      </button>
+      <button class="end-btn" id="end-btn" onclick="endInterview()">End &amp; grade</button>
+    </div>
+  </footer>
+</main>
 
 <script>
-var orb = document.getElementById('orb');
-var label = document.getElementById('status-label');
+var problemId = getQueryParam('id') || 'longest-palindrome';
+var elapsedSec = 0;
+var timerPaused = false;
 var sessionEnded = false;
 
+// Build symmetrical equalizer bars matching Figma waveform
+(function buildWaveform() {
+  var heights = [10, 18, 28, 20, 42, 54, 48, 66, 48, 54, 42, 20, 28, 18, 10];
+  var container = document.getElementById('waveform');
+  heights.forEach(function(h, i) {
+    var bar = document.createElement('span');
+    bar.className = 'bar';
+    bar.style.height = h + 'px';
+    bar.style.animationDelay = (i * 0.08) + 's';
+    container.appendChild(bar);
+  });
+})();
+
+// Load problem title
+(function loadTitle() {
+  var fallback = getFallbackProblemById(problemId);
+  document.getElementById('problem-name').textContent = fallback.title;
+  fetch(getBackendUrl() + '/api/problems/' + encodeURIComponent(problemId))
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(p) { if (p && p.title) document.getElementById('problem-name').textContent = p.title; })
+    .catch(function() {});
+})();
+
+// Live timer
+var timerInterval = setInterval(function() {
+  if (timerPaused || sessionEnded) return;
+  elapsedSec += 1;
+  var mins = String(Math.floor(elapsedSec / 60)).padStart(2, '0');
+  var secs = String(elapsedSec % 60).padStart(2, '0');
+  document.getElementById('timer').textContent = mins + ':' + secs;
+}, 1000);
+
+function togglePauseTimer() {
+  timerPaused = !timerPaused;
+  document.getElementById('sub-status').textContent = timerPaused ? 'TIMER PAUSED' : 'IN CONVERSATION';
+}
+
 window.onVoclStateChange = function(status) {
-  orb.className = 'orb ' + status;
-  var labels = { listening: 'LISTENING…', speaking: 'SPEAKING…', analyzing: 'ANALYZING…' };
-  label.textContent = labels[status] || status.toUpperCase();
-  label.style.color = status === 'speaking' ? '#30d158' : status === 'analyzing' ? '#ffa11a' : '#8e8e93';
+  if (sessionEnded) return;
+  var stage = document.getElementById('orb-stage');
+  var caption = document.getElementById('state-caption');
+  var quote = document.getElementById('prompt-quote');
+
+  stage.className = 'orb-stage ' + (status || 'listening');
+
+  if (status === 'speaking') {
+    caption.textContent = 'INTERVIEWER SPEAKING';
+    caption.style.color = '#8CB6FF';
+    quote.textContent = '“Listen closely — you can interrupt anytime to defend your approach.”';
+  } else if (status === 'analyzing') {
+    caption.textContent = 'ANALYZING APPROACH';
+    caption.style.color = '#F5A623';
+    quote.textContent = '“Checking time complexity, space bounds, and edge cases…”';
+  } else {
+    caption.textContent = 'LISTENING';
+    caption.style.color = '#28D763';
+    quote.textContent = '“Go ahead — explain your data structure and trade-offs out loud.”';
+  }
 };
 
 window.onVoclSessionComplete = function(autopsy) {
   sessionEnded = true;
-  label.textContent = 'SESSION COMPLETE';
-  orb.className = 'orb';
-  orb.style.background = 'radial-gradient(circle at 30% 30%, #6cff82, #30d158)';
-  orb.style.animation = 'none';
-  try { localStorage.setItem('lastAutopsy', JSON.stringify(autopsy)); } catch(e){}
+  clearInterval(timerInterval);
+  if (autopsy) saveSessionLocally(autopsy);
+
+  document.getElementById('state-caption').textContent = 'SESSION GRADED';
+  document.getElementById('state-caption').style.color = '#28D763';
+  document.getElementById('sub-status').textContent = 'AUTOPSY READY';
+  document.getElementById('prompt-quote').textContent = 'Opening your grade report…';
+
+  setTimeout(function() { navigateTo('grades.html'); }, 450);
 };
 
 function endInterview() {
-  if (sessionEnded) { navigateTo('drills.html'); return; }
+  if (sessionEnded) {
+    navigateTo('grades.html');
+    return;
+  }
+  var btn = document.getElementById('end-btn');
+  btn.disabled = true;
+  btn.textContent = 'Grading…';
+  document.getElementById('sub-status').textContent = 'FINISHING SESSION';
+  document.getElementById('state-caption').textContent = 'COMPUTING AUTOPSY';
+  document.getElementById('state-caption').style.color = '#F5A623';
+  document.getElementById('orb-stage').className = 'orb-stage analyzing';
+
   stopSession();
-  label.textContent = 'ENDING SESSION…';
-  setTimeout(function() { if (!sessionEnded) navigateTo('drills.html'); }, 6000);
+
+  setTimeout(function() {
+    if (!sessionEnded) navigateTo('grades.html');
+  }, 6000);
 }
 </script>
 </body>
