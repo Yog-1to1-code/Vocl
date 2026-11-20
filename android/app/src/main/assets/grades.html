@@ -23,9 +23,15 @@
 
   .page { max-width: 520px; margin: 0 auto; padding: 22px 20px 96px; display: flex; flex-direction: column; gap: 22px; }
 
-  .title-block { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; }
+  .top-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-top: 4px; }
+  .title-block { display: flex; flex-direction: column; gap: 6px; }
   .page-title { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; }
   .page-sub { font-size: 15px; color: var(--muted); }
+  .streak-pill {
+    flex-shrink: 0; padding: 7px 14px; border-radius: 9999px;
+    background: rgba(235, 166, 90, 0.08); border: 1px solid rgba(235, 166, 90, 0.45);
+    color: var(--amber); font-size: 12.5px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px;
+  }
 
   .card {
     background: var(--surface); border: 1px solid var(--surface-border); border-radius: 20px;
@@ -93,9 +99,12 @@
 <body>
 
 <main class="page">
-  <header class="title-block">
-    <h1 class="page-title">Your grades</h1>
-    <p class="page-sub">Less guessing. More evidence.</p>
+  <header class="top-row">
+    <div class="title-block">
+      <h1 class="page-title">Your grades</h1>
+      <p class="page-sub">Less guessing. More evidence.</p>
+    </div>
+    <div class="streak-pill" id="streak-pill">3-day streak</div>
   </header>
 
   <section class="card">

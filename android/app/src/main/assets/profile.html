@@ -19,14 +19,9 @@
   .mono { font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace; }
 
   .page { max-width: 520px; margin: 0 auto; padding: 22px 20px 96px; display: flex; flex-direction: column; gap: 20px; }
-  .top-row { display: flex; align-items: flex-start; justify-content: space-between; padding-top: 4px; }
+  .top-row { display: flex; flex-direction: column; padding-top: 4px; }
   .page-title { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; }
   .page-sub { font-size: 15px; color: var(--muted); margin-top: 6px; }
-  .streak-pill {
-    padding: 7px 14px; border-radius: 9999px;
-    background: rgba(235, 166, 90, 0.08); border: 1px solid rgba(235, 166, 90, 0.45);
-    color: var(--amber); font-size: 12.5px; font-weight: 600;
-  }
 
   .card {
     background: var(--surface); border: 1px solid var(--surface-border); border-radius: 20px;
@@ -45,11 +40,8 @@
 
 <main class="page">
   <header class="top-row">
-    <div>
-      <h1 class="page-title">Profile</h1>
-      <p class="page-sub">Pocket mode ready.</p>
-    </div>
-    <div class="streak-pill">3-day streak</div>
+    <h1 class="page-title">Profile</h1>
+    <p class="page-sub">Pocket mode ready.</p>
   </header>
 
   <section class="card">
