@@ -179,6 +179,13 @@ class LiveSessionManager(SessionBridge):
             tools=[types.Tool(function_declarations=[_EVALUATE_APPROACH_DECLARATION])],
             input_audio_transcription=types.AudioTranscriptionConfig(),
             output_audio_transcription=types.AudioTranscriptionConfig(),
+            # 500ms VAD triggers immediate turn handoff without post-speech dead air
+            realtime_input_config=types.RealtimeInputConfig(
+                automatic_activity_detection=types.AutomaticActivityDetection(
+                    silence_duration_ms=500,
+                    end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_HIGH,
+                )
+            ),
         )
 
     async def run(self, ws: WebSocket) -> Autopsy:

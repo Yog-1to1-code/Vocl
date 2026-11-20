@@ -72,17 +72,23 @@ async def evaluate_candidate_approach(problem: Problem, user_approach_summary: s
         await asyncio.sleep(MOCK_REASONING_LATENCY_SEC)
         return MOCK_EVALUATIONS.get(problem.id, FALLBACK_EVALUATION).model_copy(deep=True)
 
+    config_kwargs: dict = {
+        "system_instruction": build_reasoning_system_prompt(problem),
+        "response_mime_type": "application/json",
+        "response_schema": Evaluation,
+        "temperature": 0.1,
+        "max_output_tokens": 512,
+    }
+    # Use MINIMAL thinking on Gemini 3.x flash-lite (thinking_budget=0 returns 400 on 3.x)
+    if "flash-lite" in GEMINI_REASONING_MODEL and hasattr(types, "ThinkingConfig"):
+        config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_level="MINIMAL")
+
     try:
         response = await asyncio.wait_for(
             gemini_client().aio.models.generate_content(
                 model=GEMINI_REASONING_MODEL,
                 contents=build_evaluation_prompt(problem, user_approach_summary),
-                config=types.GenerateContentConfig(
-                    system_instruction=build_reasoning_system_prompt(problem),
-                    response_mime_type="application/json",
-                    response_schema=Evaluation,
-                    temperature=0.1,
-                ),
+                config=types.GenerateContentConfig(**config_kwargs),
             ),
             timeout=SYSTEM2_TIMEOUT_SEC,
         )
