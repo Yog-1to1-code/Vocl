@@ -75,6 +75,11 @@
   .orb-stage.analyzing .orb-core { background: radial-gradient(circle at 50% 45%, #2A1C07 0%, #120B02 100%); box-shadow: 0 0 42px rgba(245, 166, 35, 0.18); }
   .orb-stage.analyzing .bar { background: var(--amber); animation: waveAnalyze 0.9s ease-in-out infinite; }
 
+  .orb-stage.error .ring-outer { border-color: rgba(240, 82, 72, 0.28); }
+  .orb-stage.error .ring-mid { border-color: rgba(240, 82, 72, 0.58); }
+  .orb-stage.error .orb-core { background: radial-gradient(circle at 50% 45%, #2B0D0B 0%, #120504 100%); box-shadow: 0 0 42px rgba(240, 82, 72, 0.18); }
+  .orb-stage.error .bar { background: var(--red); }
+
   .bar { width: 3.5px; border-radius: 9999px; background: var(--blue); transform-origin: center; }
   @keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.03); } }
   @keyframes waveSpeak { 0%, 100% { transform: scaleY(0.55); } 50% { transform: scaleY(1.12); } }
@@ -196,17 +201,28 @@ window.onVoclStateChange = function(status) {
   var caption = document.getElementById('state-caption');
   var quote = document.getElementById('prompt-quote');
 
-  stage.className = 'orb-stage ' + (status || 'listening');
-
   if (status === 'speaking') {
+    stage.className = 'orb-stage speaking';
     caption.textContent = 'INTERVIEWER SPEAKING';
     caption.style.color = '#8CB6FF';
     quote.textContent = '“Listen closely — you can interrupt anytime to defend your approach.”';
   } else if (status === 'analyzing') {
+    stage.className = 'orb-stage analyzing';
     caption.textContent = 'ANALYZING APPROACH';
     caption.style.color = '#F5A623';
     quote.textContent = '“Checking time complexity, space bounds, and edge cases…”';
+  } else if (status === 'connecting') {
+    stage.className = 'orb-stage listening';
+    caption.textContent = 'CONNECTING';
+    caption.style.color = '#8CB6FF';
+    quote.textContent = '“Walk through your approach out loud before optimizing it.”';
+  } else if (status === 'error') {
+    stage.className = 'orb-stage error';
+    caption.textContent = 'CONNECTION INTERRUPTED';
+    caption.style.color = '#F05248';
+    quote.textContent = '“Audio stream disconnected. Tap End & grade to return.”';
   } else {
+    stage.className = 'orb-stage listening';
     caption.textContent = 'LISTENING';
     caption.style.color = '#28D763';
     quote.textContent = '“Go ahead — explain your data structure and trade-offs out loud.”';

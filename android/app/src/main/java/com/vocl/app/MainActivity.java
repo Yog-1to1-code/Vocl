@@ -19,6 +19,8 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import org.json.JSONObject;
+
 public class MainActivity extends AppCompatActivity {
 
     private static final int PERMISSION_REQUEST_CODE = 100;
@@ -163,18 +165,25 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void pushStateToWebView(String status) {
+        String quotedStatus = JSONObject.quote(status);
         runOnUiThread(() -> webView.evaluateJavascript(
-                "window.onVoclStateChange && window.onVoclStateChange('" + status + "')", null));
+                "window.onVoclStateChange && window.onVoclStateChange(" + quotedStatus + ")", null));
     }
 
     private void pushAutopsyToWebView(String json) {
-        String escaped = json.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n");
+        // JSONObject.quote safely escapes quotes, backslashes, CR/LF, and control chars
+        String quotedJson = JSONObject.quote(json);
         runOnUiThread(() -> webView.evaluateJavascript(
-                "window.onVoclSessionComplete && window.onVoclSessionComplete(JSON.parse('" + escaped + "'))", null));
+                "window.onVoclSessionComplete && window.onVoclSessionComplete(JSON.parse(" + quotedJson + "))", null));
     }
 
     @Override
     public void onBackPressed() {
+        String currentUrl = webView.getUrl();
+        if (currentUrl != null && currentUrl.contains("live.html") && VoclAudioService.isSessionActive()) {
+            webView.evaluateJavascript("window.endInterview && window.endInterview()", null);
+            return;
+        }
         if (webView.canGoBack()) {
             webView.goBack();
         } else {

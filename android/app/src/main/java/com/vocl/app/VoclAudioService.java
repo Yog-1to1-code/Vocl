@@ -53,6 +53,7 @@ public class VoclAudioService extends Service {
     private ExecutorService shutdownExecutor;
     private volatile boolean isRunning;
     private final AtomicBoolean isEnding = new AtomicBoolean(false);
+    private final AtomicBoolean isCleanedUp = new AtomicBoolean(false);
 
     private CountDownLatch autopsyLatch;
 
@@ -112,7 +113,19 @@ public class VoclAudioService extends Service {
     }
 
     private void startAudioSession(String problemId) {
+        // Tear down any lingering socket or audio capture before starting fresh
+        isRunning = false;
+        if (webSocket != null) {
+            try { webSocket.cancel(); } catch (Exception ignored) {}
+            webSocket = null;
+        }
+        if (captureThread != null) {
+            captureThread.interrupt();
+            captureThread = null;
+        }
+
         isEnding.set(false);
+        isCleanedUp.set(false);
         isRunning = true;
         sessionActive = true;
         currentStatus = "connecting";
@@ -148,12 +161,15 @@ public class VoclAudioService extends Service {
             @Override
             public void onFailure(WebSocket ws, Throwable t, @Nullable Response response) {
                 Log.e(TAG, "WebSocket failure", t);
+                if (autopsyLatch != null) autopsyLatch.countDown();
+                broadcastState("error");
                 cleanupSession();
             }
 
             @Override
             public void onClosed(WebSocket ws, int code, String reason) {
                 Log.i(TAG, "WebSocket closed: " + reason);
+                if (autopsyLatch != null) autopsyLatch.countDown();
                 cleanupSession();
             }
         });
@@ -161,10 +177,17 @@ public class VoclAudioService extends Service {
 
     private void startCaptureLoop(WebSocket ws) {
         captureThread = new Thread(() -> {
-            while (isRunning) {
+            while (isRunning && !Thread.currentThread().isInterrupted()) {
                 byte[] chunk = audioEngine.readCaptureChunk();
                 if (chunk != null && isRunning) {
                     ws.send(ByteString.of(chunk));
+                } else if (isRunning) {
+                    try {
+                        Thread.sleep(20); // Prevent busy-wait if AudioRecord is unavailable
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
                 }
             }
         }, "vocl-capture");
@@ -187,8 +210,12 @@ public class VoclAudioService extends Service {
                     broadcastAutopsy(text);
                     if (autopsyLatch != null) autopsyLatch.countDown();
                     break;
+                case "error":
+                    broadcastState("error");
+                    if (autopsyLatch != null) autopsyLatch.countDown();
+                    break;
                 default:
-                    Log.d(TAG, "Unknown message type: " + type);
+                    Log.d(TAG, "Ignoring frame type: " + type);
             }
         } catch (JSONException e) {
             Log.w(TAG, "Malformed server message", e);
@@ -198,8 +225,15 @@ public class VoclAudioService extends Service {
     private void endSessionAsync() {
         if (!isEnding.compareAndSet(false, true)) return;
         isRunning = false;
+        if (captureThread != null) {
+            captureThread.interrupt();
+        }
 
         // Run autopsy wait off main thread so UI never freezes
+        if (shutdownExecutor == null || shutdownExecutor.isShutdown()) {
+            cleanupSession();
+            return;
+        }
         shutdownExecutor.execute(() -> {
             WebSocket activeSocket = webSocket;
             if (activeSocket != null) {
@@ -218,15 +252,22 @@ public class VoclAudioService extends Service {
                     }
                 }
 
-                activeSocket.close(1000, "session ended");
+                try {
+                    activeSocket.close(1000, "session ended");
+                } catch (Exception ignored) {}
             }
             cleanupSession();
         });
     }
 
     private void cleanupSession() {
+        if (!isCleanedUp.compareAndSet(false, true)) return;
         isRunning = false;
         sessionActive = false;
+        if (captureThread != null) {
+            captureThread.interrupt();
+            captureThread = null;
+        }
         audioEngine.release();
         releaseWakeLock();
         stopForeground(STOP_FOREGROUND_REMOVE);
@@ -251,6 +292,7 @@ public class VoclAudioService extends Service {
     }
 
     private void acquireWakeLock() {
+        releaseWakeLock();
         PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "vocl:live_session");
         wakeLock.acquire(15 * 60 * 1000L); // 15 min safety cap

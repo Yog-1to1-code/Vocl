@@ -267,8 +267,8 @@ function renderGrades(sessions) {
     item.className = 'history-item';
     item.innerHTML =
       '<div>' +
-        '<div class="history-title">' + (p ? p.title : s.problem_id) + '</div>' +
-        '<div class="history-meta">' + formatDateLabel(s.timestamp_utc) + ' &middot; ' + m + ' min &middot; ' + (s.final_complexity || '—') + '</div>' +
+        '<div class="history-title">' + escapeHtml(p ? p.title : s.problem_id) + '</div>' +
+        '<div class="history-meta">' + escapeHtml(formatDateLabel(s.timestamp_utc)) + ' &middot; ' + m + ' min &middot; ' + escapeHtml(s.final_complexity || '—') + '</div>' +
       '</div>' +
       '<div class="history-score mono">' + sc + '</div>';
     histEl.appendChild(item);

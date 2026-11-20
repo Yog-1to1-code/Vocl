@@ -140,3 +140,151 @@ def test_mock_non_blocking_tool_call_execution():
         await manager._cancel_active_turn()
 
     asyncio.run(_test())
+
+
+def test_concurrent_websocket_writes_serialized():
+    """Verify _ws_write_lock prevents overlapping send_text / send_bytes frames."""
+    async def _test():
+        manager = LiveSessionManager("longest-palindrome")
+        active_writers = 0
+        overlap_detected = False
+
+        async def _guarded_write(*_args, **_kwargs):
+            nonlocal active_writers, overlap_detected
+            active_writers += 1
+            if active_writers > 1:
+                overlap_detected = True
+            await asyncio.sleep(0.005)
+            active_writers -= 1
+
+        ws_mock = MagicMock()
+        ws_mock.send_text = AsyncMock(side_effect=_guarded_write)
+        ws_mock.send_bytes = AsyncMock(side_effect=_guarded_write)
+
+        await asyncio.gather(
+            *[manager._send_json(ws_mock, {"type": "state", "status": "listening"}) for _ in range(5)],
+            *[manager._send_bytes(ws_mock, b"\x00\x00" * 160) for _ in range(5)],
+        )
+        assert overlap_detected is False
+        assert ws_mock.send_text.call_count == 5
+        assert ws_mock.send_bytes.call_count == 5
+
+    asyncio.run(_test())
+
+
+def test_end_session_during_in_flight_tool_call(monkeypatch):
+    """Verify closing session mid-evaluation cancels background task without calling send_tool_response."""
+    import app.services.reasoning_engine as reasoning_engine
+
+    async def _test():
+        monkeypatch.setattr(reasoning_engine, "USE_MOCK_AI", True)
+        monkeypatch.setattr(reasoning_engine, "MOCK_REASONING_LATENCY_SEC", 0.3)
+
+        manager = LiveSessionManager("longest-palindrome")
+        ws_mock = AsyncMock()
+        session_mock = MagicMock()
+        session_mock.send_tool_response = AsyncMock()
+
+        call = MagicMock()
+        call.id = "call_inflight_1"
+        call.name = "evaluate_approach"
+        call.args = {"user_approach_summary": "In-flight approach"}
+        tool_call = MagicMock()
+        tool_call.function_calls = [call]
+
+        manager._dispatch_tool_call(ws_mock, session_mock, tool_call)
+        assert manager._tool_call_in_flight is True
+        await asyncio.sleep(0.05)
+
+        # Simulate session teardown while evaluation is still running
+        manager._closed = True
+        for bg in list(manager._background_tasks):
+            bg.cancel()
+        await asyncio.gather(*manager._background_tasks, return_exceptions=True)
+
+        assert manager._tool_call_in_flight is False
+        session_mock.send_tool_response.assert_not_called()
+
+    asyncio.run(_test())
+
+
+def test_zero_evaluation_early_exit_and_404_routes(tmp_path, monkeypatch):
+    """Verify 0-evaluation early exit produces valid Autopsy and invalid problem IDs return 404."""
+    from fastapi.testclient import TestClient
+    import app.services.csv_storage as csv_storage
+    from app.main import app
+
+    monkeypatch.setattr(csv_storage, "CSV_PATH", str(tmp_path / "early_exit.csv"))
+    client = TestClient(app)
+
+    # Unknown problem via REST returns 404 instead of unhandled KeyError
+    resp = client.get("/api/problems/nonexistent-problem")
+    assert resp.status_code == 404
+
+    # Early exit before any approach is proposed
+    with client.websocket_connect("/ws/interview/url-shortener") as ws:
+        ws.send_text('{"type": "end_session"}')
+        autopsy = None
+        for _ in range(30):
+            msg = ws.receive()
+            if msg.get("text"):
+                payload = __import__("json").loads(msg["text"])
+                if payload.get("type") == "autopsy":
+                    autopsy = payload
+                    break
+        assert autopsy is not None
+        assert autopsy["problem_id"] == "url-shortener"
+        assert autopsy["final_complexity"] == "Not evaluated"
+        assert autopsy["score"] == 0.0
+        assert autopsy["is_optimal"] is False
+        assert autopsy["timestamp_utc"]
+
+
+def test_upstream_audio_flows_during_system2_analysis(monkeypatch):
+    """Verify upstream audio chunks continue flowing non-blockingly while System 2 analyzes."""
+    import app.services.reasoning_engine as reasoning_engine
+
+    async def _test():
+        monkeypatch.setattr(reasoning_engine, "USE_MOCK_AI", True)
+        monkeypatch.setattr(reasoning_engine, "MOCK_REASONING_LATENCY_SEC", 0.15)
+
+        manager = MockLiveSessionManager("longest-palindrome")
+        ws_mock = AsyncMock()
+        await manager._update_client_status(ws_mock, "listening")
+
+        # Cross the 64KB trigger threshold to launch background System 2 evaluation
+        manager._accumulate_candidate_audio(ws_mock, 64000)
+        assert len(manager._background_tasks) == 1
+
+        # Wait briefly for task to enter 'analyzing' state
+        await asyncio.sleep(0.02)
+        assert manager.state.client_status == "analyzing"
+
+        # Stream additional audio while System 2 is still running
+        manager._accumulate_candidate_audio(ws_mock, 6400)
+        assert manager.state.upstream_bytes_during_analysis == 6400
+
+        await manager._cancel_active_turn()
+
+    asyncio.run(_test())
+
+
+def test_system2_fallback_on_malformed_json_or_timeout(monkeypatch):
+    """Verify reasoning_engine returns FALLBACK_EVALUATION on malformed JSON or timeout."""
+    import app.services.reasoning_engine as reasoning_engine
+
+    async def _test():
+        monkeypatch.setattr(reasoning_engine, "USE_MOCK_AI", False)
+
+        bad_resp = MagicMock()
+        bad_resp.text = "{not-valid-json"
+        fake_client = MagicMock()
+        fake_client.aio.models.generate_content = AsyncMock(return_value=bad_resp)
+        monkeypatch.setattr(reasoning_engine, "gemini_client", lambda: fake_client)
+
+        result = await reasoning_engine.evaluate_candidate_approach(
+            PROBLEMS["longest-palindrome"], "test approach"
+        )
+        assert result == reasoning_engine.FALLBACK_EVALUATION
+
+    asyncio.run(_test())

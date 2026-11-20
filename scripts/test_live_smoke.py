@@ -86,7 +86,8 @@ async def run():
                     if status == "listening" and len(states_seen) > 1:
                         greeting_done.set()
                 elif ft == "tool_result":
-                    log(f"Tool result: {json.dumps(frame.get('evaluation',{}), indent=2)[:200]}")
+                    verdict = {k: v for k, v in frame.items() if k != "type"}
+                    log(f"Tool result: {json.dumps(verdict, indent=2)[:240]}")
                 elif ft == "autopsy":
                     autopsy = frame
                     log("Autopsy received")

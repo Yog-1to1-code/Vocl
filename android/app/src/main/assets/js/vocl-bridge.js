@@ -84,12 +84,27 @@ function getFallbackProblemById(id) {
     return VOCL_FALLBACK_PROBLEMS[0];
 }
 
+function escapeHtml(value) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function saveSessionLocally(autopsy) {
+    if (!autopsy) return;
     try {
         localStorage.setItem('lastAutopsy', JSON.stringify(autopsy));
         var history = JSON.parse(localStorage.getItem('voclSessions') || '[]');
-        history.push(autopsy);
-        localStorage.setItem('voclSessions', JSON.stringify(history));
+        var exists = autopsy.session_id && history.some(function(item) {
+            return item && item.session_id === autopsy.session_id;
+        });
+        if (!exists) {
+            history.push(autopsy);
+            localStorage.setItem('voclSessions', JSON.stringify(history));
+        }
     } catch (e) {
         console.warn('localStorage write failed', e);
     }

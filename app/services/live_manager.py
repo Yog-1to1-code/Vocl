@@ -96,6 +96,8 @@ class LiveSessionState:
     evaluations: list[Evaluation] = field(default_factory=list)
     candidate_transcript: list[str] = field(default_factory=list)
     client_status: str = ""
+    upstream_bytes_received: int = 0
+    upstream_bytes_during_analysis: int = 0
 
 
 class SessionBridge:
@@ -104,12 +106,14 @@ class SessionBridge:
     def __init__(self, problem_id: str) -> None:
         self.problem = PROBLEMS[problem_id]
         self.state = LiveSessionState(problem_id=problem_id)
+        self._ws_write_lock = asyncio.Lock()
+        self._closed = False
 
     async def run(self, ws: WebSocket) -> Autopsy:
         raise NotImplementedError
 
     async def _update_client_status(self, ws: WebSocket, status: str) -> None:
-        if status == self.state.client_status:
+        if self._closed or status == self.state.client_status:
             return
         self.state.client_status = status
         await self._send_json(ws, {"type": "state", "status": status})
@@ -126,6 +130,7 @@ class SessionBridge:
         autopsy = summarize_evaluations(self.state, evaluations)
         await append_session(SessionRow(
             session_id=autopsy.session_id,
+            timestamp_utc=autopsy.timestamp_utc,
             problem_id=autopsy.problem_id,
             duration_sec=autopsy.duration_sec,
             final_complexity=autopsy.final_complexity,
@@ -134,15 +139,28 @@ class SessionBridge:
             missed_edge_cases="; ".join(autopsy.missed_edge_cases),
             summary_feedback=autopsy.summary_feedback,
         ))
-        await self._send_json(ws, {"type": "autopsy", **autopsy.model_dump()})
+        await self._send_json(ws, {"type": "autopsy", **autopsy.model_dump()}, allow_when_closing=True)
         return autopsy
 
-    @staticmethod
-    async def _send_json(ws: WebSocket, payload: dict) -> None:
-        try:
-            await ws.send_text(json.dumps(payload))
-        except Exception:
-            logger.debug("Client socket closed; dropped %s frame", payload.get("type"))
+    async def _send_json(self, ws: WebSocket, payload: dict, allow_when_closing: bool = False) -> None:
+        if self._closed and not allow_when_closing:
+            return
+        async with self._ws_write_lock:
+            try:
+                await ws.send_text(json.dumps(payload))
+            except Exception:
+                logger.debug("Client socket closed; dropped %s frame", payload.get("type"))
+
+    async def _send_bytes(self, ws: WebSocket, data: bytes) -> bool:
+        if self._closed:
+            return False
+        async with self._ws_write_lock:
+            try:
+                await ws.send_bytes(data)
+                return True
+            except Exception:
+                logger.debug("Client socket closed; dropped binary audio frame")
+                return False
 
 
 class LiveSessionManager(SessionBridge):
@@ -177,6 +195,7 @@ class LiveSessionManager(SessionBridge):
                         if not task.cancelled() and task.exception():
                             logger.error("Session task failed", exc_info=task.exception())
                 finally:
+                    self._closed = True
                     for task in tasks:
                         task.cancel()
                     await asyncio.gather(*tasks, return_exceptions=True)
@@ -185,8 +204,9 @@ class LiveSessionManager(SessionBridge):
                     if self._background_tasks:
                         await asyncio.gather(*self._background_tasks, return_exceptions=True)
         except Exception:
+            self._closed = True
             logger.exception("Gemini Live session error")
-            await self._send_json(ws, {"type": "error", "message": "Live session unavailable"})
+            await self._send_json(ws, {"type": "error", "message": "Live session unavailable"}, allow_when_closing=True)
 
         evaluations = self.state.evaluations
         if not evaluations and self.state.candidate_transcript:
@@ -201,6 +221,10 @@ class LiveSessionManager(SessionBridge):
             if message["type"] == "websocket.disconnect":
                 return
             if message.get("bytes"):
+                byte_len = len(message["bytes"])
+                self.state.upstream_bytes_received += byte_len
+                if self.state.client_status == "analyzing":
+                    self.state.upstream_bytes_during_analysis += byte_len
                 await session.send_realtime_input(audio=types.Blob(data=message["bytes"], mime_type=_UPSTREAM_MIME))
             elif message.get("text") and _parse_control_type(message["text"]) == "end_session":
                 return
@@ -208,8 +232,10 @@ class LiveSessionManager(SessionBridge):
     async def _relay_gemini_to_client(self, ws: WebSocket, session) -> None:
         await self._update_client_status(ws, "listening")
         # session.receive() ends after each model turn, so re-enter it per turn
-        while True:
+        while not self._closed:
             async for response in session.receive():
+                if self._closed:
+                    return
                 if response.tool_call:
                     self._dispatch_tool_call(ws, session, response.tool_call)
                     continue
@@ -229,12 +255,15 @@ class LiveSessionManager(SessionBridge):
                     for part in content.model_turn.parts:
                         if part.inline_data and part.inline_data.data:
                             await self._update_client_status(ws, "speaking")
-                            await ws.send_bytes(part.inline_data.data)
+                            if not await self._send_bytes(ws, part.inline_data.data):
+                                return
 
                 if content.turn_complete:
                     await self._update_client_status(ws, "listening")
 
     def _dispatch_tool_call(self, ws: WebSocket, session, tool_call: types.LiveServerToolCall) -> None:
+        if self._closed:
+            return
         for call in tool_call.function_calls or []:
             if call.name != "evaluate_approach":
                 continue
@@ -252,6 +281,8 @@ class LiveSessionManager(SessionBridge):
         try:
             summary = (call.args or {}).get("user_approach_summary", "")
             evaluation = await self._record_evaluation(ws, summary)
+            if self._closed:
+                return
             resp_kwargs = {
                 "id": call.id,
                 "name": call.name,
@@ -261,6 +292,8 @@ class LiveSessionManager(SessionBridge):
                 resp_kwargs["scheduling"] = _SCHEDULING_INTERRUPT
             response = types.FunctionResponse(**resp_kwargs)
             await session.send_tool_response(function_responses=[response])
+        except asyncio.CancelledError:
+            raise
         except Exception:
             logger.exception("Error executing asynchronous evaluate_approach tool call")
         finally:
@@ -285,6 +318,7 @@ class MockLiveSessionManager(SessionBridge):
         except asyncio.TimeoutError:
             logger.info("Mock session %s hit the %ds cap", self.state.session_id, SESSION_MAX_DURATION_SEC)
         finally:
+            self._closed = True
             await self._cancel_active_turn()
         return await self._persist_and_send_autopsy(ws, self.state.evaluations)
 
@@ -303,7 +337,11 @@ class MockLiveSessionManager(SessionBridge):
                 await self._simulate_barge_in(ws)
 
     def _accumulate_candidate_audio(self, ws: WebSocket, byte_count: int) -> None:
-        # Only count speech while idle, mirroring a real turn boundary
+        self.state.upstream_bytes_received += byte_count
+        if self.state.client_status == "analyzing":
+            self.state.upstream_bytes_during_analysis += byte_count
+            return
+        # Only accumulate turn trigger threshold while listening
         if self.state.client_status != "listening":
             return
         self._pending_candidate_bytes += byte_count
@@ -321,8 +359,12 @@ class MockLiveSessionManager(SessionBridge):
     async def _run_mock_tool_call_turn(self, ws: WebSocket) -> None:
         try:
             await self._record_evaluation(ws, f"Mock transcript: candidate proposed an approach for {self.problem.title}.")
+            if self._closed:
+                return
             self._turn_task = asyncio.create_task(self._speak(ws, HINT_CHIME_PCM))
             await self._turn_task
+        except asyncio.CancelledError:
+            raise
         except Exception:
             logger.debug("Mock turn cancelled or interrupted")
         finally:
@@ -330,25 +372,28 @@ class MockLiveSessionManager(SessionBridge):
 
     async def _speak(self, ws: WebSocket, pcm: bytes) -> None:
         await self._update_client_status(ws, "speaking")
-        try:
-            for offset in range(0, len(pcm), _DOWNSTREAM_CHUNK_BYTES):
-                await ws.send_bytes(pcm[offset:offset + _DOWNSTREAM_CHUNK_BYTES])
-                await asyncio.sleep(_DOWNSTREAM_CHUNK_SEC)  # Real-time pacing keeps AudioTrack's non-blocking buffer from dropping audio
-        except Exception:
-            logger.debug("Client socket closed mid-utterance")
-            return
+        for offset in range(0, len(pcm), _DOWNSTREAM_CHUNK_BYTES):
+            if self._closed:
+                return
+            if not await self._send_bytes(ws, pcm[offset:offset + _DOWNSTREAM_CHUNK_BYTES]):
+                return
+            await asyncio.sleep(_DOWNSTREAM_CHUNK_SEC)  # Real-time pacing keeps AudioTrack's non-blocking buffer from dropping audio
         await self._update_client_status(ws, "listening")
 
     async def _simulate_barge_in(self, ws: WebSocket) -> None:
         if self.state.client_status == "speaking":
-            await self._cancel_active_turn()
+            await self._cancel_speech_turn()
         await self._send_json(ws, {"type": "clear_audio_buffer"})
-        await self._update_client_status(ws, "listening")
+        if not self._tool_call_in_flight:
+            await self._update_client_status(ws, "listening")
 
-    async def _cancel_active_turn(self) -> None:
+    async def _cancel_speech_turn(self) -> None:
         if self._turn_task and not self._turn_task.done():
             self._turn_task.cancel()
             await asyncio.gather(self._turn_task, return_exceptions=True)
+
+    async def _cancel_active_turn(self) -> None:
+        await self._cancel_speech_turn()
         for bg in list(self._background_tasks):
             if not bg.done():
                 bg.cancel()

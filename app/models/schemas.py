@@ -31,6 +31,9 @@ class Evaluation(BaseModel):
 
 class Autopsy(BaseModel):
     session_id: str
+    timestamp_utc: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
     problem_id: str
     duration_sec: int
     final_complexity: str
