@@ -184,6 +184,10 @@ class LiveSessionManager(SessionBridge):
     async def run(self, ws: WebSocket) -> Autopsy:
         try:
             async with gemini_client().aio.live.connect(model=GEMINI_LIVE_MODEL, config=self._build_live_config()) as session:
+                await session.send_client_content(
+                    turns=types.Content(role="user", parts=[types.Part(text="Begin the interview.")]),
+                    turn_complete=True,
+                )
                 tasks = [
                     asyncio.create_task(self._relay_client_to_gemini(ws, session)),
                     asyncio.create_task(self._relay_gemini_to_client(ws, session)),
