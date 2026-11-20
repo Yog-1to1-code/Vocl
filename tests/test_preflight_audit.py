@@ -60,7 +60,8 @@ def test_live_session_manager_config_dry_run(monkeypatch):
 
     assert types.Modality.AUDIO in config.response_modalities
     assert len(config.tools) == 1
-    assert config.tools[0].function_declarations[0].name == "evaluate_approach"
+    decl_names = [d.name for d in config.tools[0].function_declarations]
+    assert decl_names == ["evaluate_approach", "submit_final_grade"]
     assert config.input_audio_transcription is not None
     assert config.output_audio_transcription is not None
     assert "Vocl" in config.system_instruction
@@ -312,5 +313,74 @@ def test_system2_fallback_on_malformed_json_or_timeout(monkeypatch):
         assert len(sent_responses) == 1
         assert sent_responses[0].response == reasoning_engine.SYSTEM2_TIMEOUT_RESPONSE
         assert sent_responses[0].response["status"] == "timeout"
+
+    asyncio.run(_test())
+
+
+def test_gemini_live_final_rubric_grading_and_timeout_fallback(monkeypatch):
+    """Verify end-of-session rubric grading via submit_final_grade (0 and 1+ prior tool calls) and timeout fallback."""
+    from app.config import settings
+    from app.services.live_manager import summarize_evaluations
+
+    async def _test():
+        # Case 1: 0 prior evaluate_approach calls -> Gemini Live submits holistic rubric grade
+        manager = LiveSessionManager("longest-palindrome")
+        ws_mock = AsyncMock()
+        session_mock = MagicMock()
+
+        async def _send_content_and_grade(**_kwargs):
+            call = MagicMock()
+            call.name = "submit_final_grade"
+            call.args = {
+                "final_complexity": "O(N^2) / O(1)",
+                "is_optimal": False,
+                "correctness_score": 8.0,
+                "complexity_score": 7.5,
+                "edge_cases_score": 6.5,
+                "communication_score": 8.5,
+                "overall_score": 7.6,
+                "missed_edge_cases": ["All identical characters"],
+                "summary_feedback": "Clear explanation with minimal fillers. Consider Manacher's algorithm for O(N).",
+            }
+            tc = MagicMock()
+            tc.function_calls = [call]
+            manager._dispatch_tool_call(ws_mock, session_mock, tc)
+
+        session_mock.send_client_content = AsyncMock(side_effect=_send_content_and_grade)
+        await manager._request_final_live_grade(session_mock)
+
+        autopsy = summarize_evaluations(manager.state, manager.state.evaluations)
+        assert autopsy.grading_source == "gemini_live"
+        assert autopsy.score == 7.6
+        assert autopsy.correctness_score == 8.0
+        assert autopsy.complexity_score == 7.5
+        assert autopsy.edge_cases_score == 6.5
+        assert autopsy.communication_score == 8.5
+        assert autopsy.final_complexity == "O(N^2) / O(1)"
+        assert "minimal fillers" in autopsy.summary_feedback
+
+        # Case 2: 1+ prior evaluations + Gemini Live final grade timeout -> falls back cleanly
+        manager2 = LiveSessionManager("longest-palindrome")
+        manager2.state.evaluations.append(
+            Evaluation(
+                time_complexity="O(N^3)",
+                space_complexity="O(1)",
+                is_optimal=False,
+                issues=["Cubic time"],
+                missed_edge_cases=["Even-length palindromes"],
+                next_socratic_hint="Can you expand from a center?",
+                score_delta=4.5,
+            )
+        )
+        slow_session = MagicMock()
+        slow_session.send_client_content = AsyncMock()
+        monkeypatch.setattr(settings, "FINAL_GRADE_TIMEOUT_SEC", 0.05)
+
+        await manager2._request_final_live_grade(slow_session)
+        fallback_autopsy = summarize_evaluations(manager2.state, manager2.state.evaluations)
+        assert fallback_autopsy.grading_source == "system2"
+        assert fallback_autopsy.final_complexity == "O(N^3) / O(1)"
+        assert fallback_autopsy.score == 4.5
+        assert fallback_autopsy.communication_score > 0.0
 
     asyncio.run(_test())

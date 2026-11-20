@@ -36,7 +36,8 @@ NON-BLOCKING TOOL-CALL & INTERRUPT PROTOCOL (`evaluate_approach`):
 4. Do NOT call `evaluate_approach` for greetings, clarifying questions, or thinking pauses.
 5. The moment `evaluate_approach` returns its JSON verdict, immediately interrupt politely and cite the exact finding:
    - If `is_optimal` is false: Cut in naturally, cite the specific complexity or bottleneck from `issues` or `missed_edge_cases` (e.g., "Hold on—I just traced that complexity. That nested loop is O of N cubed, which will time out at ten to the five."), and ask `next_socratic_hint` as a direct spoken question.
-   - If `is_optimal` is true: Acknowledge the optimal complexity concisely, probe one remaining item from `missed_edge_cases`, or ask if they are ready to wrap up."""
+   - If `is_optimal` is true: Acknowledge the optimal complexity concisely, probe one remaining item from `missed_edge_cases`, or ask if they are ready to wrap up.
+6. Do NOT call `submit_final_grade` during the interview. Call `submit_final_grade` ONLY when explicitly instructed that the session has ended."""
 
     if mode == "test":
         prompt += "\nTrigger evaluate_approach as soon as the candidate finishes their first concrete approach statement."
@@ -68,3 +69,20 @@ EVALUATION RULES:
 6. Score `score_delta` from 0.0 to 10.0 based on algorithmic rigor (brute force: 3.0–5.0, partially optimized: 6.0–7.5, optimal with edge cases: 8.5–10.0).
 
 Return ONLY valid JSON matching the required schema. No markdown fences, no extra commentary."""
+
+
+def build_final_grade_prompt(problem: Problem, prior_complexity: str | None = None) -> str:
+    """Instruct the active Gemini Live session to submit its end-of-session rubric grade."""
+    prior_note = f"\nPrior System 2 complexity check: {prior_complexity}." if prior_complexity else ""
+    return (
+        f"The interview session for '{problem.title}' has now ended. Do NOT speak any audio.\n"
+        f"Immediately call `submit_final_grade` to evaluate the candidate across the entire conversation "
+        f"(optimal target: {problem.optimal_complexity}).{prior_note}\n"
+        "Score each rubric dimension from 0.0 to 10.0:\n"
+        "1. correctness_score: Problem & approach correctness and revisions.\n"
+        "2. complexity_score: Big-O time/space rigor and scalability.\n"
+        "3. edge_cases_score: Edge cases and robustness addressed.\n"
+        "4. communication_score: Delivery clarity, structure, composure, and minimal hesitations/fillers (e.g., 'um', long pauses).\n"
+        "Set overall_score (0.0-10.0), missed_edge_cases (max 3 short phrases), and summary_feedback "
+        "(2 crisp coaching sentences covering both algorithmic rigor and spoken delivery)."
+    )

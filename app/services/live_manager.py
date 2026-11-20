@@ -23,8 +23,8 @@ from app.config import (
     settings,
 )
 from app.data.problems import PROBLEMS
-from app.models.schemas import Autopsy, Evaluation, Problem, SessionRow
-from app.prompts import build_live_system_prompt
+from app.models.schemas import Autopsy, Evaluation, FinalRubricGrade, Problem, SessionRow
+from app.prompts import build_final_grade_prompt, build_live_system_prompt
 from app.services.csv_storage import append_session
 from app.services.gemini_client import gemini_client
 from app.services.reasoning_engine import (
@@ -32,6 +32,7 @@ from app.services.reasoning_engine import (
     evaluate_candidate_approach,
     is_timeout_evaluation,
 )
+from app.services.session_recorder import SessionAudioRecorder
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,43 @@ if _BEHAVIOR_NON_BLOCKING is not None:
 
 _EVALUATE_APPROACH_DECLARATION = types.FunctionDeclaration(**_declaration_kwargs)
 
+_SUBMIT_FINAL_GRADE_DECLARATION = types.FunctionDeclaration(
+    name="submit_final_grade",
+    description=(
+        "Submit the final end-of-session rubric grade for the candidate across the full "
+        "interview conversation. Call ONLY when explicitly told the session has ended."
+    ),
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "final_complexity": types.Schema(type=types.Type.STRING, description="Candidate's final time / space complexity, e.g. 'O(N^2) / O(1)'."),
+            "is_optimal": types.Schema(type=types.Type.BOOLEAN, description="True only if the candidate reached the optimal complexity with sound logic."),
+            "correctness_score": types.Schema(type=types.Type.NUMBER, description="0-10 score for problem & approach correctness."),
+            "complexity_score": types.Schema(type=types.Type.NUMBER, description="0-10 score for complexity & scalability rigor."),
+            "edge_cases_score": types.Schema(type=types.Type.NUMBER, description="0-10 score for edge cases & robustness."),
+            "communication_score": types.Schema(type=types.Type.NUMBER, description="0-10 score for clarity, composure, pauses, and filler words."),
+            "overall_score": types.Schema(type=types.Type.NUMBER, description="0-10 overall interview score."),
+            "missed_edge_cases": types.Schema(
+                type=types.Type.ARRAY,
+                items=types.Schema(type=types.Type.STRING),
+                description="Up to 3 short phrases for missed edge cases.",
+            ),
+            "summary_feedback": types.Schema(type=types.Type.STRING, description="2 crisp coaching sentences covering technical rigor and delivery."),
+        },
+        required=[
+            "final_complexity",
+            "is_optimal",
+            "correctness_score",
+            "complexity_score",
+            "edge_cases_score",
+            "communication_score",
+            "overall_score",
+            "missed_edge_cases",
+            "summary_feedback",
+        ],
+    ),
+)
+
 
 def _build_system_instruction(problem: Problem) -> str:
     return build_live_system_prompt(problem, settings.PROMPT_MODE)
@@ -100,6 +138,7 @@ class LiveSessionState:
     problem_id: str = ""
     start_time: float = field(default_factory=time.time)
     evaluations: list[Evaluation] = field(default_factory=list)
+    final_grade: FinalRubricGrade | None = None
     candidate_transcript: list[str] = field(default_factory=list)
     client_status: str = ""
     upstream_bytes_received: int = 0
@@ -142,6 +181,11 @@ class SessionBridge:
             final_complexity=autopsy.final_complexity,
             is_optimal=autopsy.is_optimal,
             score=autopsy.score,
+            correctness_score=autopsy.correctness_score,
+            complexity_score=autopsy.complexity_score,
+            edge_cases_score=autopsy.edge_cases_score,
+            communication_score=autopsy.communication_score,
+            grading_source=autopsy.grading_source,
             missed_edge_cases="; ".join(autopsy.missed_edge_cases),
             summary_feedback=autopsy.summary_feedback,
         ))
@@ -177,12 +221,17 @@ class LiveSessionManager(SessionBridge):
         self._background_tasks: set[asyncio.Task] = set()
         self._tool_call_in_flight: bool = False
         self._last_tool_call_timestamp: float = 0.0
+        self._grading_final: bool = False
+        self._final_grade_ready = asyncio.Event()
+        self._recorder: SessionAudioRecorder | None = (
+            SessionAudioRecorder(self.state.session_id) if settings.RECORD_SESSIONS else None
+        )
 
     def _build_live_config(self) -> types.LiveConnectConfig:
         return types.LiveConnectConfig(
             response_modalities=[types.Modality.AUDIO],
             system_instruction=build_live_system_prompt(self.problem, settings.PROMPT_MODE),
-            tools=[types.Tool(function_declarations=[_EVALUATE_APPROACH_DECLARATION])],
+            tools=[types.Tool(function_declarations=[_EVALUATE_APPROACH_DECLARATION, _SUBMIT_FINAL_GRADE_DECLARATION])],
             input_audio_transcription=types.AudioTranscriptionConfig(),
             output_audio_transcription=types.AudioTranscriptionConfig(),
             # 500ms VAD triggers immediate turn handoff without post-speech dead air
@@ -225,12 +274,40 @@ class LiveSessionManager(SessionBridge):
             logger.exception("Gemini Live session error")
             await self._send_json(ws, {"type": "error", "message": "Live session unavailable"}, allow_when_closing=True)
 
+        if self._recorder is not None:
+            try:
+                self._recorder.save_stereo_wav()
+            except Exception:
+                logger.exception("Failed to save session audio mix")
+
         evaluations = self.state.evaluations
-        if not evaluations and self.state.candidate_transcript:
-            # No tool call fired, so grade the raw transcript once
+        if self.state.final_grade is None and not evaluations and self.state.candidate_transcript:
+            # Fallback when live final grading did not return and no tool call fired
             transcript = "".join(self.state.candidate_transcript)[-_FINAL_TRANSCRIPT_CHARS:]
             evaluations = [await evaluate_candidate_approach(self.problem, f"Candidate said: {transcript}")]
         return await self._persist_and_send_autopsy(ws, evaluations)
+
+    async def _request_final_live_grade(self, session) -> None:
+        """Ask the active Gemini Live session for a rubric evaluation before teardown."""
+        self._grading_final = True
+        prior = (
+            f"{self.state.evaluations[-1].time_complexity} / {self.state.evaluations[-1].space_complexity}"
+            if self.state.evaluations
+            else None
+        )
+        try:
+            await session.send_client_content(
+                turns=types.Content(
+                    role="user",
+                    parts=[types.Part(text=build_final_grade_prompt(self.problem, prior))],
+                ),
+                turn_complete=True,
+            )
+            await asyncio.wait_for(self._final_grade_ready.wait(), timeout=settings.FINAL_GRADE_TIMEOUT_SEC)
+        except asyncio.TimeoutError:
+            logger.warning("Gemini Live final rubric grade timed out after %.1fs; using fallback", settings.FINAL_GRADE_TIMEOUT_SEC)
+        except Exception:
+            logger.warning("Gemini Live final rubric grade failed; using fallback", exc_info=True)
 
     async def _relay_client_to_gemini(self, ws: WebSocket, session) -> None:
         while True:
@@ -238,12 +315,18 @@ class LiveSessionManager(SessionBridge):
             if message["type"] == "websocket.disconnect":
                 return
             if message.get("bytes"):
-                byte_len = len(message["bytes"])
+                if self._grading_final:
+                    continue
+                raw_pcm = message["bytes"]
+                byte_len = len(raw_pcm)
                 self.state.upstream_bytes_received += byte_len
                 if self.state.client_status == "analyzing":
                     self.state.upstream_bytes_during_analysis += byte_len
-                await session.send_realtime_input(audio=types.Blob(data=message["bytes"], mime_type=_UPSTREAM_MIME))
+                if self._recorder is not None:
+                    self._recorder.record_user_pcm(raw_pcm)
+                await session.send_realtime_input(audio=types.Blob(data=raw_pcm, mime_type=_UPSTREAM_MIME))
             elif message.get("text") and _parse_control_type(message["text"]) == "end_session":
+                await self._request_final_live_grade(session)
                 return
 
     async def _relay_gemini_to_client(self, ws: WebSocket, session) -> None:
@@ -255,6 +338,9 @@ class LiveSessionManager(SessionBridge):
                     return
                 if response.tool_call:
                     self._dispatch_tool_call(ws, session, response.tool_call)
+                    continue
+
+                if self._grading_final:
                     continue
 
                 content = response.server_content
@@ -272,6 +358,8 @@ class LiveSessionManager(SessionBridge):
                     for part in content.model_turn.parts:
                         if part.inline_data and part.inline_data.data:
                             await self._update_client_status(ws, "speaking")
+                            if self._recorder is not None:
+                                self._recorder.record_ai_pcm(part.inline_data.data)
                             if not await self._send_bytes(ws, part.inline_data.data):
                                 return
 
@@ -282,7 +370,10 @@ class LiveSessionManager(SessionBridge):
         if self._closed:
             return
         for call in tool_call.function_calls or []:
-            if call.name != "evaluate_approach":
+            if call.name == "submit_final_grade":
+                self._capture_final_grade(call.args or {})
+                continue
+            if call.name != "evaluate_approach" or self._grading_final:
                 continue
             now = time.time()
             if self._tool_call_in_flight or (now - self._last_tool_call_timestamp < 3.0):
@@ -293,6 +384,14 @@ class LiveSessionManager(SessionBridge):
             task = asyncio.create_task(self._execute_tool_call_async(ws, session, call))
             self._background_tasks.add(task)
             task.add_done_callback(self._background_tasks.discard)
+
+    def _capture_final_grade(self, args: dict) -> None:
+        try:
+            self.state.final_grade = FinalRubricGrade.model_validate(args)
+            self._final_grade_ready.set()
+            logger.info("Captured Gemini Live final rubric grade: score=%.1f", self.state.final_grade.overall_score)
+        except Exception:
+            logger.warning("Malformed submit_final_grade args; falling back", exc_info=True)
 
     async def _execute_tool_call_async(self, ws: WebSocket, session, call) -> None:
         try:
@@ -427,23 +526,55 @@ def create_session_bridge(problem_id: str) -> SessionBridge:
     return MockLiveSessionManager(problem_id) if USE_MOCK_AI else LiveSessionManager(problem_id)
 
 
+def _clamp_score(value: float) -> float:
+    return round(max(0.0, min(10.0, float(value))), 1)
+
+
 def summarize_evaluations(state: LiveSessionState, evaluations: list[Evaluation]) -> Autopsy:
     duration = int(time.time() - state.start_time)
+    if state.final_grade is not None:
+        grade = state.final_grade
+        return Autopsy(
+            session_id=state.session_id,
+            problem_id=state.problem_id,
+            duration_sec=duration,
+            final_complexity=grade.final_complexity,
+            is_optimal=grade.is_optimal,
+            score=_clamp_score(grade.overall_score),
+            correctness_score=_clamp_score(grade.correctness_score),
+            complexity_score=_clamp_score(grade.complexity_score),
+            edge_cases_score=_clamp_score(grade.edge_cases_score),
+            communication_score=_clamp_score(grade.communication_score),
+            grading_source="gemini_live",
+            missed_edge_cases=list(dict.fromkeys(grade.missed_edge_cases)),
+            summary_feedback=grade.summary_feedback or "Session evaluated by Gemini Live.",
+        )
+
     if not evaluations:
         return Autopsy(
             session_id=state.session_id, problem_id=state.problem_id, duration_sec=duration,
-            final_complexity="Not evaluated", is_optimal=False, score=0.0, missed_edge_cases=[],
+            final_complexity="Not evaluated", is_optimal=False, score=0.0,
+            correctness_score=0.0, complexity_score=0.0, edge_cases_score=0.0, communication_score=0.0,
+            grading_source="fallback", missed_edge_cases=[],
             summary_feedback="Session ended before any approach was proposed.",
         )
+
     latest = evaluations[-1]
+    score = _clamp_score(max(e.score_delta for e in evaluations))
+    missed = list(dict.fromkeys(case for e in evaluations for case in e.missed_edge_cases))
     return Autopsy(
         session_id=state.session_id,
         problem_id=state.problem_id,
         duration_sec=duration,
         final_complexity=f"{latest.time_complexity} / {latest.space_complexity}",
         is_optimal=latest.is_optimal,
-        score=round(min(10.0, max(e.score_delta for e in evaluations)), 1),
-        missed_edge_cases=list(dict.fromkeys(case for e in evaluations for case in e.missed_edge_cases)),
+        score=score,
+        correctness_score=score,
+        complexity_score=_clamp_score(8.5 if latest.is_optimal else max(2.5, score - 0.5)),
+        edge_cases_score=_clamp_score(max(2.0, 10.0 - len(missed) * 2.0)),
+        communication_score=_clamp_score(min(10.0, score + 1.0)),
+        grading_source="system2",
+        missed_edge_cases=missed,
         summary_feedback=latest.next_socratic_hint,
     )
 

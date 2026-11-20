@@ -159,9 +159,14 @@
       <h2 class="section-title">Where you stand</h2>
 
       <div class="metric-row">
+        <span class="metric-name">Problem &amp; approach</span>
+        <div class="bar-track"><div class="bar-fill" id="bar-correctness" style="width:0%;background:#28D763;"></div></div>
+        <span class="metric-val mono" id="val-correctness" style="color:#28D763;">-/10</span>
+      </div>
+      <div class="metric-row">
         <span class="metric-name">Complexity rigor</span>
-        <div class="bar-track"><div class="bar-fill" id="bar-complexity" style="width:0%;background:#28D763;"></div></div>
-        <span class="metric-val mono" id="val-complexity" style="color:#28D763;">-/10</span>
+        <div class="bar-track"><div class="bar-fill" id="bar-complexity" style="width:0%;background:#0A84FF;"></div></div>
+        <span class="metric-val mono" id="val-complexity" style="color:#9AB8FF;">-/10</span>
       </div>
       <div class="metric-row">
         <span class="metric-name">Edge-case coverage</span>
@@ -169,9 +174,9 @@
         <span class="metric-val mono" id="val-edge" style="color:#FF9F0A;">-/10</span>
       </div>
       <div class="metric-row">
-        <span class="metric-name">Hint receptivity</span>
-        <div class="bar-track"><div class="bar-fill" id="bar-hint" style="width:0%;background:#9AB8FF;"></div></div>
-        <span class="metric-val mono" id="val-hint" style="color:#9AB8FF;">-/10</span>
+        <span class="metric-name">Communication</span>
+        <div class="bar-track"><div class="bar-fill" id="bar-comm" style="width:0%;background:#28D763;"></div></div>
+        <span class="metric-val mono" id="val-comm" style="color:#28D763;">-/10</span>
       </div>
     </section>
 
@@ -256,13 +261,16 @@ function renderSelectedAutopsy(index) {
     edgeCard.style.display = 'none';
   }
 
-  var compTen = isOptimal ? Math.max(8, Math.round(score / 10)) : Math.max(3, Math.round(score / 11));
-  var edgeTen = Math.max(2, 10 - edges.length * 2);
-  var hintTen = Math.min(10, Math.max(4, Math.round((score + 10) / 11)));
+  var hasRubric = session.correctness_score !== undefined && session.correctness_score !== '' && session.correctness_score !== null;
+  var corrTen = hasRubric ? Math.round(parseFloat(session.correctness_score) || 0) : Math.round(score / 10);
+  var compTen = hasRubric ? Math.round(parseFloat(session.complexity_score) || 0) : (isOptimal ? Math.max(8, Math.round(score / 10)) : Math.max(3, Math.round(score / 11)));
+  var edgeTen = hasRubric ? Math.round(parseFloat(session.edge_cases_score) || 0) : Math.max(2, 10 - edges.length * 2);
+  var commTen = hasRubric ? Math.round(parseFloat(session.communication_score) || 0) : Math.min(10, Math.max(4, Math.round((score + 10) / 11)));
 
+  setMetric('correctness', corrTen);
   setMetric('complexity', compTen);
   setMetric('edge', edgeTen);
-  setMetric('hint', hintTen);
+  setMetric('comm', commTen);
 
   document.getElementById('next-time-text').textContent =
     session.summary_feedback || 'Keep defending your time and space trade-offs out loud.';

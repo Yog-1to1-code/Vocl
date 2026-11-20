@@ -21,6 +21,7 @@ __pycache__/
 .pytest_cache/
 .env
 data/sessions.csv
+data/recordings/
 .DS_Store
 tests/fixtures/last_ai_response.wav
 tests/fixtures/live_interruption_mix.wav

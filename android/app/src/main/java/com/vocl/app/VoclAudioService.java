@@ -258,7 +258,7 @@ public class VoclAudioService extends Service {
                 CountDownLatch latch = autopsyLatch;
                 if (latch != null) {
                     try {
-                        latch.await(5, TimeUnit.SECONDS);
+                        latch.await(8, TimeUnit.SECONDS);
                     } catch (InterruptedException ignored) {
                         Thread.currentThread().interrupt();
                     }

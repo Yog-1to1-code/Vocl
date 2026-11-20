@@ -11,6 +11,7 @@ def _read_bool(name: str, default: str = "false") -> bool:
 
 
 USE_MOCK_AI: bool = _read_bool("USE_MOCK_AI")
+RECORD_SESSIONS: bool = _read_bool("RECORD_SESSIONS")
 PROMPT_MODE: str = os.environ.get("PROMPT_MODE", "prod").strip().lower()
 
 GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY", "")
@@ -19,6 +20,7 @@ GEMINI_REASONING_MODEL: str = os.environ.get("GEMINI_REASONING_MODEL", "gemini-3
 
 SESSION_MAX_DURATION_SEC: int = 900
 SYSTEM2_TIMEOUT_SEC: float = float(os.environ.get("SYSTEM2_TIMEOUT_SEC", "3.0"))
+FINAL_GRADE_TIMEOUT_SEC: float = float(os.environ.get("FINAL_GRADE_TIMEOUT_SEC", "5.0"))
 MOCK_REASONING_LATENCY_SEC: float = 1.5
 
 CSV_PATH: str = os.environ.get("CSV_PATH", "data/sessions.csv")

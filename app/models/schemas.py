@@ -29,6 +29,18 @@ class Evaluation(BaseModel):
     score_delta: float
 
 
+class FinalRubricGrade(BaseModel):
+    final_complexity: str = "Not evaluated"
+    is_optimal: bool = False
+    correctness_score: float = 0.0
+    complexity_score: float = 0.0
+    edge_cases_score: float = 0.0
+    communication_score: float = 0.0
+    overall_score: float = 0.0
+    missed_edge_cases: list[str] = Field(default_factory=list)
+    summary_feedback: str = ""
+
+
 class Autopsy(BaseModel):
     session_id: str
     timestamp_utc: str = Field(
@@ -39,6 +51,11 @@ class Autopsy(BaseModel):
     final_complexity: str
     is_optimal: bool
     score: float
+    correctness_score: float = 0.0
+    complexity_score: float = 0.0
+    edge_cases_score: float = 0.0
+    communication_score: float = 0.0
+    grading_source: str = "system2"
     missed_edge_cases: list[str]
     summary_feedback: str
 
@@ -53,6 +70,11 @@ class SessionRow(BaseModel):
     final_complexity: str = ""
     is_optimal: bool = False
     score: float = 0.0
+    correctness_score: float = 0.0
+    complexity_score: float = 0.0
+    edge_cases_score: float = 0.0
+    communication_score: float = 0.0
+    grading_source: str = "system2"
     missed_edge_cases: str = ""
     summary_feedback: str = ""
 

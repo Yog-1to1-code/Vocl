@@ -16,6 +16,11 @@ _CSV_HEADERS = [
     "final_complexity",
     "is_optimal",
     "score",
+    "correctness_score",
+    "complexity_score",
+    "edge_cases_score",
+    "communication_score",
+    "grading_source",
     "missed_edge_cases",
     "summary_feedback",
 ]
@@ -45,6 +50,11 @@ async def append_session(row: SessionRow) -> None:
                 row.final_complexity,
                 row.is_optimal,
                 row.score,
+                row.correctness_score,
+                row.complexity_score,
+                row.edge_cases_score,
+                row.communication_score,
+                row.grading_source,
                 row.missed_edge_cases,
                 row.summary_feedback,
             ])
