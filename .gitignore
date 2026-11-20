@@ -22,3 +22,4 @@ __pycache__/
 .env
 data/sessions.csv
 .DS_Store
+tests/fixtures/last_ai_response.wav
