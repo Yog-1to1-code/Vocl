@@ -220,5 +220,10 @@ public class MainActivity extends AppCompatActivity {
         public String getBackendUrl() {
             return BackendConfig.BASE_HTTP_URL;
         }
+
+        @JavascriptInterface
+        public void setMuted(boolean muted) {
+            VoclAudioService.setMicMuted(muted);
+        }
     }
 }

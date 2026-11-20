@@ -42,6 +42,7 @@ public class VoclAudioService extends Service {
 
     // Shared snapshot so MainActivity can re-sync UI after screen unlock
     private static volatile boolean sessionActive;
+    private static volatile boolean micMuted;
     private static volatile String currentStatus;
     private static volatile String lastAutopsyJson;
 
@@ -59,6 +60,14 @@ public class VoclAudioService extends Service {
 
     public static boolean isSessionActive() {
         return sessionActive;
+    }
+
+    public static void setMicMuted(boolean muted) {
+        micMuted = muted;
+    }
+
+    public static boolean isMicMuted() {
+        return micMuted;
     }
 
     @Nullable
@@ -128,6 +137,7 @@ public class VoclAudioService extends Service {
         isCleanedUp.set(false);
         isRunning = true;
         sessionActive = true;
+        micMuted = false;
         currentStatus = "connecting";
         lastAutopsyJson = null;
         autopsyLatch = new CountDownLatch(1);
@@ -180,7 +190,9 @@ public class VoclAudioService extends Service {
             while (isRunning && !Thread.currentThread().isInterrupted()) {
                 byte[] chunk = audioEngine.readCaptureChunk();
                 if (chunk != null && isRunning) {
-                    ws.send(ByteString.of(chunk));
+                    if (!micMuted) {
+                        ws.send(ByteString.of(chunk));
+                    }
                 } else if (isRunning) {
                     try {
                         Thread.sleep(20); // Prevent busy-wait if AudioRecord is unavailable

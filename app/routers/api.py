@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException
 from app.config import settings
 from app.data.problems import PROBLEMS
 from app.models.schemas import Problem
-from app.services.csv_storage import read_sessions
+from app.services.csv_storage import clear_sessions, read_sessions
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -28,3 +28,9 @@ async def get_problem(problem_id: str) -> Problem:
 @router.get("/sessions")
 async def list_sessions() -> list[dict[str, str]]:
     return await read_sessions()
+
+
+@router.delete("/sessions")
+async def reset_sessions() -> dict[str, str]:
+    await clear_sessions()
+    return {"status": "cleared"}

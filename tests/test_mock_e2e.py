@@ -132,3 +132,17 @@ def test_websocket_mock_audio_tool_call_and_csv_autopsy(isolated_mock_env: Path)
     assert len(sessions) == 1
     assert sessions[0]["problem_id"] == "longest-palindrome"
     assert sessions[0]["final_complexity"] == "O(N^3) / O(1)"
+
+
+def test_delete_sessions_clears_csv(isolated_mock_env: Path) -> None:
+    import asyncio
+    from app.models.schemas import SessionRow
+
+    asyncio.run(csv_storage.append_session(SessionRow(problem_id="url-shortener", score=8.0)))
+    client = TestClient(app)
+    assert len(client.get("/api/sessions").json()) == 1
+
+    reset_resp = client.delete("/api/sessions")
+    assert reset_resp.status_code == 200
+    assert reset_resp.json() == {"status": "cleared"}
+    assert client.get("/api/sessions").json() == []

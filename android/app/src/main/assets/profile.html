@@ -1,156 +1,210 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport"
-    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Vocl · Profile</title>
-  <style>
-    :root {
-      --bg: #000000;
-      --surface: #141416;
-      --surface-border: #242428;
-      --green: #28D763;
-      --amber: #EBA65A;
-      --text: #FFFFFF;
-      --muted: #8E8E93;
-    }
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Vocl · Profile</title>
+<link rel="stylesheet" href="css/vocl-theme.css">
+<style>
+  .top-row { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; }
+  .page-title { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; }
+  .page-sub { font-size: 15px; color: var(--muted); }
 
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-      -webkit-font-smoothing: antialiased;
-      -webkit-tap-highlight-color: transparent;
-    }
+  .profile-header { display: flex; align-items: center; gap: 16px; }
+  .avatar {
+    width: 56px; height: 56px; border-radius: 50%; flex-shrink: 0;
+    background: rgba(40, 215, 99, 0.14); border: 1.5px solid rgba(40, 215, 99, 0.45);
+    color: var(--green); font-size: 20px; font-weight: 700; letter-spacing: -0.02em;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .profile-identity { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .profile-name { font-size: 19px; font-weight: 700; letter-spacing: -0.02em; }
+  .profile-role { font-size: 13.5px; color: var(--muted); }
 
-    html,
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
-      min-height: 100vh;
-    }
+  .stats-grid { display: grid; grid-template-columns: 1fr 1px 1fr; gap: 14px; align-items: center; padding-top: 2px; }
+  .v-sep { height: 34px; background: var(--surface-border); }
+  .stat-cell { display: flex; flex-direction: column; gap: 3px; }
+  .stat-val { font-size: 22px; font-weight: 700; color: #FFFFFF; line-height: 1.1; }
+  .stat-lbl { font-size: 12px; color: var(--muted); }
 
-    .mono {
-      font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
-    }
+  .pref-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .pref-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .pref-title { font-size: 15px; font-weight: 600; color: #FFFFFF; }
+  .pref-sub { font-size: 12.5px; color: var(--muted); word-break: break-all; }
 
-    .page {
-      max-width: 520px;
-      margin: 0 auto;
-      padding: 22px 20px 96px;
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-    }
-
-    .top-row {
-      display: flex;
-      flex-direction: column;
-      padding-top: 4px;
-    }
-
-    .page-title {
-      font-size: 30px;
-      font-weight: 700;
-      letter-spacing: -0.03em;
-    }
-
-    .page-sub {
-      font-size: 15px;
-      color: var(--muted);
-      margin-top: 6px;
-    }
-
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--surface-border);
-      border-radius: 20px;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-    }
-
-    .card-label {
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      color: var(--muted);
-      text-transform: uppercase;
-    }
-
-    .row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-
-    .row-title {
-      font-size: 15px;
-      font-weight: 600;
-      color: #FFFFFF;
-    }
-
-    .row-val {
-      font-size: 13px;
-      color: var(--muted);
-    }
-
-    .row-val.green {
-      color: var(--green);
-      font-weight: 600;
-    }
-
-    .divider {
-      height: 1px;
-      background: var(--surface-border);
-    }
-  </style>
-  <script src="js/vocl-bridge.js"></script>
+  .reset-btn {
+    width: 100%; height: 48px; border-radius: 14px;
+    background: rgba(255, 69, 58, 0.06); border: 1px solid rgba(255, 69, 58, 0.45);
+    color: var(--red); font-size: 14.5px; font-weight: 600; cursor: pointer;
+    transition: transform 0.15s ease, background 0.15s ease;
+  }
+  .reset-btn:active { transform: scale(0.985); background: rgba(255, 69, 58, 0.16); }
+  .reset-btn:disabled { opacity: 0.5; }
+</style>
+<script src="js/vocl-bridge.js"></script>
 </head>
-
 <body>
 
 <main class="page">
   <header class="top-row">
     <h1 class="page-title">Profile</h1>
-    <p class="page-sub">Pocket mode ready.</p>
+    <p class="page-sub">Pocket mode &amp; live engine controls.</p>
   </header>
 
-    <section class="card">
-      <span class="card-label mono">AUDIO ENGINE</span>
-      <div class="row">
-        <span class="row-title">Screen-off streaming</span>
-        <span class="row-val green mono">ENABLED</span>
+  <section class="card">
+    <div class="profile-header">
+      <div class="avatar mono">YM</div>
+      <div class="profile-identity">
+        <div class="profile-name">Yogesh Mali</div>
+        <div class="profile-role">CSE &bull; Commute Mode</div>
       </div>
-      <div class="divider"></div>
-      <div class="row">
-        <span class="row-title">Audio format</span>
-        <span class="row-val mono">16 kHz / 24 kHz PCM</span>
+    </div>
+    <div class="divider"></div>
+    <div class="stats-grid">
+      <div class="stat-cell">
+        <span class="stat-val mono" id="stat-sessions">0</span>
+        <span class="stat-lbl">Completed drills</span>
       </div>
-      <div class="divider"></div>
-      <div class="row">
-        <span class="row-title">Backend endpoint</span>
-        <span class="row-val mono" id="backend-url">—</span>
+      <div class="v-sep"></div>
+      <div class="stat-cell">
+        <span class="stat-val mono" id="stat-streak">0 days</span>
+        <span class="stat-lbl">Active streak</span>
       </div>
-    </section>
+    </div>
+  </section>
 
-    <section class="card">
-      <span class="card-label mono">COMING SOON</span>
-      <p style="font-size:14.5px;line-height:1.5;color:#B4B4BC;">
-        Longitudinal weakness tracking, custom interview rubrics, and voice persona selection will live here.
-      </p>
-    </section>
-  </main>
+  <section class="card">
+    <span class="card-label mono">PREFERENCES</span>
 
-  <script>renderBottomNav('profile');</script>
-  <script>
-    document.getElementById('backend-url').textContent = getBackendUrl();
-  </script>
+    <div class="pref-row">
+      <div class="pref-info">
+        <span class="pref-title">Interviewer style</span>
+        <span class="pref-sub" id="style-desc">Targeted Socratic nudges</span>
+      </div>
+      <div class="segmented" role="group" aria-label="Interviewer style">
+        <button class="segmented-btn active" id="style-socratic" onclick="setInterviewerStyle('Socratic')">Socratic</button>
+        <button class="segmented-btn" id="style-strict" onclick="setInterviewerStyle('Strict')">Strict</button>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="pref-row">
+      <div class="pref-info">
+        <span class="pref-title">Pocket mode wake lock</span>
+        <span class="pref-sub">Active &bull; Screen-off audio enabled</span>
+      </div>
+      <span class="pill live mono"><span class="status-dot"></span>ON</span>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="pref-row">
+      <div class="pref-info">
+        <span class="pref-title">Backend status</span>
+        <span class="pref-sub mono" id="backend-host">—</span>
+      </div>
+      <span class="pill offline mono" id="health-pill"><span class="status-dot"></span>Checking</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <span class="card-label mono">DEMO CONTROLS</span>
+    <p class="pref-sub">Clear recorded session rows from the backend CSV and local cache before a fresh run.</p>
+    <button class="reset-btn" id="reset-btn" onclick="resetDemoSessions()">Reset Demo Sessions</button>
+  </section>
+</main>
+
+<script>renderBottomNav('profile');</script>
+
+<script>
+function setInterviewerStyle(style) {
+  localStorage.setItem('voclInterviewerStyle', style);
+  var isSocratic = style === 'Socratic';
+  document.getElementById('style-socratic').classList.toggle('active', isSocratic);
+  document.getElementById('style-strict').classList.toggle('active', !isSocratic);
+  document.getElementById('style-desc').textContent = isSocratic
+    ? 'Targeted Socratic nudges'
+    : 'Direct FAANG complexity challenges';
+}
+
+function loadPreferences() {
+  var saved = localStorage.getItem('voclInterviewerStyle') || 'Socratic';
+  setInterviewerStyle(saved);
+  document.getElementById('backend-host').textContent = getBackendUrl();
+}
+
+function checkBackendHealth() {
+  var pill = document.getElementById('health-pill');
+  fetch(getBackendUrl() + '/api/health')
+    .then(function(res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    })
+    .then(function(data) {
+      var mode = data && data.ai_mode === 'live' ? 'Live' : 'Mock';
+      pill.className = 'pill live mono';
+      pill.innerHTML = '<span class="status-dot"></span>Connected (' + escapeHtml(mode) + ')';
+    })
+    .catch(function() {
+      pill.className = 'pill offline mono';
+      pill.innerHTML = '<span class="status-dot"></span>Offline';
+    });
+}
+
+function loadSessionStats() {
+  fetch(getBackendUrl() + '/api/sessions')
+    .then(function(res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    })
+    .then(function(list) {
+      var sessions = Array.isArray(list) ? list : [];
+      var days = computeStreakDays(sessions);
+      document.getElementById('stat-sessions').textContent = String(sessions.length);
+      document.getElementById('stat-streak').textContent = days + (days === 1 ? ' day' : ' days');
+    })
+    .catch(function() {
+      try {
+        var local = JSON.parse(localStorage.getItem('voclSessions') || '[]');
+        var days = computeStreakDays(local);
+        document.getElementById('stat-sessions').textContent = String(local.length);
+        document.getElementById('stat-streak').textContent = days + (days === 1 ? ' day' : ' days');
+      } catch (e) {}
+    });
+}
+
+function resetDemoSessions() {
+  var btn = document.getElementById('reset-btn');
+  btn.disabled = true;
+  btn.textContent = 'Clearing…';
+
+  fetch(getBackendUrl() + '/api/sessions', { method: 'DELETE' })
+    .then(function(res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    })
+    .then(function() {
+      localStorage.removeItem('voclSessions');
+      localStorage.removeItem('lastAutopsy');
+      document.getElementById('stat-sessions').textContent = '0';
+      document.getElementById('stat-streak').textContent = '0 days';
+      showToast('Demo sessions cleared');
+    })
+    .catch(function() {
+      localStorage.removeItem('voclSessions');
+      localStorage.removeItem('lastAutopsy');
+      showToast('Cleared local cache (server offline)');
+    })
+    .finally(function() {
+      btn.disabled = false;
+      btn.textContent = 'Reset Demo Sessions';
+    });
+}
+
+loadPreferences();
+checkBackendHealth();
+loadSessionStats();
+</script>
 </body>
-
 </html>

@@ -4,23 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Vocl · Problem Brief</title>
+<link rel="stylesheet" href="css/vocl-theme.css">
 <style>
-  :root {
-    --bg: #000000;
-    --surface: #141416;
-    --surface-border: #242428;
-    --green: #28D763;
-    --blue: #9AB8FF;
-    --amber: #EBA65A;
-    --red: #FF5247;
-    --text: #FFFFFF;
-    --muted: #8E8E93;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; }
-  html, body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif; min-height: 100vh; }
-  ::-webkit-scrollbar { display: none; }
-  .mono { font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
-
   .top-bar {
     position: sticky; top: 0; z-index: 40; background: rgba(0,0,0,0.92); backdrop-filter: blur(16px);
     height: 54px; padding: 0 16px; display: flex; align-items: center; gap: 12px;
@@ -33,48 +18,48 @@
   .back-btn:active { background: rgba(255,255,255,0.1); }
   .top-title { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
 
-  .page { max-width: 520px; margin: 0 auto; padding: 8px 20px 96px; display: flex; flex-direction: column; gap: 20px; }
+  .page { padding-top: 8px; }
 
   .meta-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .pills { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .pill {
-    padding: 5px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600;
-    border: 1px solid transparent;
-  }
-  .pill.cat { background: rgba(154,184,255,0.10); border-color: rgba(154,184,255,0.28); color: var(--blue); }
-  .pill.easy { background: rgba(40,215,99,0.10); border-color: rgba(40,215,99,0.32); color: var(--green); }
-  .pill.medium { background: rgba(235,166,90,0.10); border-color: rgba(235,166,90,0.32); color: var(--amber); }
-  .pill.hard { background: rgba(255,82,71,0.12); border-color: rgba(255,82,71,0.35); color: var(--red); }
-
   .duration { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
 
   .title-block { display: flex; flex-direction: column; gap: 10px; }
   .problem-title { font-size: 30px; font-weight: 700; line-height: 1.12; letter-spacing: -0.03em; color: #FFFFFF; }
   .problem-tagline { font-size: 15px; color: var(--muted); line-height: 1.4; }
 
-  .divider { height: 1px; background: #1E1E22; width: 100%; }
-
   .challenge-section { display: flex; flex-direction: column; gap: 10px; }
   .section-heading { font-size: 19px; font-weight: 700; letter-spacing: -0.02em; }
-  .statement { font-size: 15.5px; line-height: 1.5; color: #D4D4D8; }
+  .statement { font-size: 15.5px; line-height: 1.5; color: var(--text-secondary); }
 
-  .card {
-    background: var(--surface); border: 1px solid var(--surface-border); border-radius: 16px;
-    padding: 16px 18px; display: flex; flex-direction: column; gap: 10px;
-  }
   .io-row { display: flex; align-items: baseline; gap: 14px; font-size: 13.5px; line-height: 1.45; }
   .io-key { width: 64px; flex-shrink: 0; font-weight: 600; font-size: 12px; letter-spacing: 0.04em; color: #FFFFFF; }
-  .io-key.out { color: var(--blue); }
+  .io-key.out { color: var(--blue-soft); }
   .io-val { color: #FFFFFF; word-break: break-word; }
-  .io-val.out { color: var(--blue); }
+  .io-val.out { color: var(--blue-soft); }
 
-  .card-label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
   .constraints-list { display: flex; flex-direction: column; gap: 6px; }
   .constraint-item { font-size: 14px; color: #F2F2F7; line-height: 1.45; }
-  .card-divider { height: 1px; background: var(--surface-border); margin: 4px 0; }
   .target-line { font-size: 14px; font-weight: 600; color: var(--green); }
 
-  .cta-block { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-top: 6px; }
+  /* Accordion */
+  .accordion-btn {
+    width: 100%; background: transparent; border: none; color: #FFFFFF;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    cursor: pointer; text-align: left; padding: 0;
+  }
+  .accordion-title { font-size: 15px; font-weight: 600; }
+  .accordion-chevron { color: var(--muted); transition: transform 0.2s ease; flex-shrink: 0; }
+  .accordion-btn.open .accordion-chevron { transform: rotate(180deg); color: var(--green); }
+  .accordion-body {
+    display: none; flex-direction: column; gap: 8px;
+    padding-top: 12px; border-top: 1px solid var(--surface-border);
+  }
+  .accordion-body.open { display: flex; }
+  .objective-item { font-size: 13.5px; color: var(--text-secondary); line-height: 1.45; display: flex; gap: 8px; }
+  .objective-dot { color: var(--amber); font-weight: 700; }
+
+  .cta-block { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-top: 6px; padding-bottom: 8px; }
   .start-btn {
     width: 100%; height: 56px; border: none; border-radius: 18px;
     background: var(--green); color: #000000;
@@ -91,7 +76,7 @@
 <body>
 
 <header class="top-bar">
-  <button class="back-btn" onclick="navigateTo('drills.html')" aria-label="Back">
+  <button class="back-btn" onclick="navigateTo('drills.html')" aria-label="Back to Drills">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
   </button>
   <span class="top-title">The brief</span>
@@ -128,15 +113,26 @@
     </div>
     <div class="io-row">
       <span class="io-key out">OUTPUT</span>
-      <span class="io-val out" id="io-output">"bab"  (or "aba")</span>
+      <span class="io-val out" id="io-output">"bab" (or "aba")</span>
     </div>
   </section>
 
   <section class="card">
     <span class="card-label mono">CONSTRAINTS TO DEFEND</span>
     <div class="constraints-list mono" id="constraints-list"></div>
-    <div class="card-divider"></div>
+    <div class="divider"></div>
     <div class="target-line" id="brief-target">Target: O(N)</div>
+  </section>
+
+  <section class="card">
+    <button class="accordion-btn" id="hints-btn" onclick="toggleHints()" aria-expanded="false">
+      <div>
+        <div class="card-label mono" style="margin-bottom:4px;">HINTS &amp; OBJECTIVES</div>
+        <div class="accordion-title">Edge cases &amp; rubric checkpoints</div>
+      </div>
+      <svg class="accordion-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+    </button>
+    <div class="accordion-body" id="hints-body"></div>
   </section>
 
   <section class="cta-block">
@@ -155,6 +151,14 @@
 
 <script>
 var problemId = getQueryParam('id') || 'longest-palindrome';
+
+function toggleHints() {
+  var btn = document.getElementById('hints-btn');
+  var body = document.getElementById('hints-body');
+  var isOpen = body.classList.toggle('open');
+  btn.classList.toggle('open', isOpen);
+  btn.setAttribute('aria-expanded', String(isOpen));
+}
 
 function beginSession() {
   if (!problemId) return;
@@ -186,6 +190,16 @@ function renderProblem(p) {
     row.className = 'constraint-item';
     row.textContent = c;
     list.appendChild(row);
+  });
+
+  var hintsBody = document.getElementById('hints-body');
+  hintsBody.innerHTML = '';
+  var edgeCases = (p.key_edge_cases && p.key_edge_cases.length) ? p.key_edge_cases : (fallback.key_edge_cases || []);
+  edgeCases.forEach(function(item) {
+    var el = document.createElement('div');
+    el.className = 'objective-item';
+    el.innerHTML = '<span class="objective-dot">&bull;</span><span>' + escapeHtml(item) + '</span>';
+    hintsBody.appendChild(el);
   });
 
   document.getElementById('brief-target').textContent = 'Target: ' + p.optimal_complexity;

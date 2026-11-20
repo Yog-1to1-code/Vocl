@@ -56,3 +56,12 @@ async def read_sessions() -> list[dict[str, str]]:
         with open(CSV_PATH, "r", newline="") as f:
             reader = csv.DictReader(f)
             return list(reader)
+
+
+async def clear_sessions() -> None:
+    async with _lock:
+        path = Path(CSV_PATH)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(_CSV_HEADERS)

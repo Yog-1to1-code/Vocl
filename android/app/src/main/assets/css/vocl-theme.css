@@ -1,0 +1,231 @@
+/* Vocl unified OLED-black design system (zero external CDN dependencies) */
+
+:root {
+  --bg: #000000;
+  --surface: #121214;
+  --surface-elevated: #18181B;
+  --surface-border: #242428;
+  --green: #28D763;
+  --green-dim: #1F5E35;
+  --amber: #FF9F0A;
+  --red: #FF453A;
+  --blue: #0A84FF;
+  --blue-soft: #9AB8FF;
+  --text: #FFFFFF;
+  --text-secondary: #D4D4D8;
+  --muted: #8E8E93;
+  --radius-card: 20px;
+  --radius-control: 16px;
+  --radius-pill: 9999px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
+  min-height: 100vh;
+}
+
+::-webkit-scrollbar {
+  display: none;
+}
+
+.mono {
+  font-family: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.page {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 20px 20px calc(96px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-card);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.card-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.divider {
+  height: 1px;
+  background: var(--surface-border);
+  width: 100%;
+}
+
+.streak-pill {
+  flex-shrink: 0;
+  padding: 7px 14px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 159, 10, 0.10);
+  border: 1px solid rgba(255, 159, 10, 0.42);
+  color: var(--amber);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.pill.cat {
+  background: rgba(10, 132, 255, 0.12);
+  border-color: rgba(154, 184, 255, 0.30);
+  color: var(--blue-soft);
+}
+
+.pill.easy,
+.pill.live {
+  background: rgba(40, 215, 99, 0.12);
+  border-color: rgba(40, 215, 99, 0.36);
+  color: var(--green);
+}
+
+.pill.medium {
+  background: rgba(255, 159, 10, 0.12);
+  border-color: rgba(255, 159, 10, 0.36);
+  color: var(--amber);
+}
+
+.pill.hard,
+.pill.offline {
+  background: rgba(255, 69, 58, 0.12);
+  border-color: rgba(255, 69, 58, 0.38);
+  color: var(--red);
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+/* Segmented control */
+.segmented {
+  display: inline-flex;
+  background: #0A0A0C;
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  padding: 3px;
+  gap: 3px;
+}
+
+.segmented-btn {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.segmented-btn.active {
+  background: var(--green);
+  color: #000000;
+}
+
+/* Shared 3-tab bottom navigation */
+.vocl-bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.96);
+  backdrop-filter: blur(18px);
+  border-top: 1px solid rgba(255, 255, 255, 0.10);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.vocl-bottom-nav-inner {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 0 12px;
+}
+
+.vocl-nav-tab {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  color: var(--muted);
+  text-decoration: none;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.vocl-nav-tab.active {
+  color: var(--green);
+  font-weight: 600;
+}
+
+/* Toast banner */
+.vocl-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(82px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%) translateY(12px);
+  z-index: 90;
+  padding: 10px 18px;
+  border-radius: var(--radius-pill);
+  background: #1C1C1E;
+  border: 1px solid #34343A;
+  color: #FFFFFF;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  white-space: nowrap;
+}
+
+.vocl-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}

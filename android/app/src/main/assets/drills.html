@@ -4,33 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Vocl · Drills</title>
+<link rel="stylesheet" href="css/vocl-theme.css">
 <style>
-  :root {
-    --bg: #000000;
-    --surface: #141416;
-    --surface-border: #242428;
-    --green: #28D763;
-    --blue: #9AB8FF;
-    --amber: #EBA65A;
-    --text: #FFFFFF;
-    --muted: #8E8E93;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; }
-  html, body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif; min-height: 100vh; }
-  ::-webkit-scrollbar { display: none; }
-
-  .page { max-width: 520px; margin: 0 auto; padding: 20px 20px 96px; display: flex; flex-direction: column; gap: 22px; }
-
   .top-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-top: 6px; }
   .hero-headline { font-size: 28px; font-weight: 700; line-height: 1.15; letter-spacing: -0.03em; color: #FFFFFF; }
-  .streak-pill {
-    flex-shrink: 0; padding: 7px 14px; border-radius: 9999px;
-    background: rgba(235, 166, 90, 0.08); border: 1px solid rgba(235, 166, 90, 0.45);
-    color: var(--amber); font-size: 12.5px; font-weight: 600; letter-spacing: -0.01em; margin-top: 2px;
-  }
 
   .featured-card {
-    background: var(--surface); border: 1px solid var(--surface-border); border-radius: 20px;
+    background: var(--surface); border: 1px solid var(--surface-border); border-radius: var(--radius-card);
     padding: 22px; display: flex; flex-direction: column; gap: 10px; cursor: pointer;
     transition: transform 0.15s ease, border-color 0.15s ease;
   }
@@ -41,16 +21,25 @@
 
   .filter-row { display: flex; align-items: center; gap: 10px; overflow-x: auto; padding-bottom: 2px; }
   .filter-pill {
-    flex-shrink: 0; padding: 10px 18px; border-radius: 9999px;
+    flex-shrink: 0; padding: 10px 18px; border-radius: var(--radius-pill);
     background: #161618; border: 1px solid var(--surface-border);
     color: var(--muted); font-size: 13.5px; font-weight: 600; cursor: pointer;
     transition: all 0.15s ease;
   }
   .filter-pill.active { background: var(--green); border-color: var(--green); color: #000000; }
 
-  .section-header { display: flex; align-items: baseline; justify-content: space-between; margin-top: 2px; }
+  .section-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 2px; }
   .section-title { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
+  .section-actions { display: flex; align-items: center; gap: 10px; }
   .section-count { font-size: 13px; color: var(--muted); }
+  .shuffle-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: var(--radius-pill);
+    background: var(--surface); border: 1px solid var(--surface-border);
+    color: #FFFFFF; font-size: 12.5px; font-weight: 600; cursor: pointer;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+  }
+  .shuffle-btn:active { transform: scale(0.95); border-color: var(--green); color: var(--green); }
 
   .drill-list { display: flex; flex-direction: column; gap: 14px; }
   .drill-card {
@@ -65,8 +54,8 @@
     display: flex; align-items: center; justify-content: center;
   }
   .icon-tile.dsa { background: rgba(40, 215, 99, 0.11); color: var(--green); }
-  .icon-tile.system { background: rgba(154, 184, 255, 0.11); color: var(--blue); }
-  .icon-tile.devops { background: rgba(235, 166, 90, 0.11); color: var(--amber); }
+  .icon-tile.system { background: rgba(10, 132, 255, 0.12); color: var(--blue-soft); }
+  .icon-tile.devops { background: rgba(255, 159, 10, 0.12); color: var(--amber); }
 
   .drill-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
   .drill-title { font-size: 17px; font-weight: 700; line-height: 1.25; letter-spacing: -0.02em; color: #FFFFFF; }
@@ -80,14 +69,14 @@
 <main class="page">
   <header class="top-row">
     <h1 class="hero-headline">Think it.<br>Say it. Defend it.</h1>
-    <div class="streak-pill" id="streak-pill">3-day streak</div>
+    <div class="streak-pill" id="streak-pill">Ready</div>
   </header>
 
   <section class="featured-card" id="featured-card" onclick="openFeatured()">
     <div class="featured-title" id="featured-title">Longest palindromic substring.</div>
     <div class="featured-sub" id="featured-sub">10 minutes of thinking out loud.</div>
     <div class="featured-cta">
-      <span>Find your next drill</span>
+      <span>Start featured drill</span>
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
     </div>
   </section>
@@ -101,7 +90,13 @@
 
   <div class="section-header">
     <h2 class="section-title">Choose your challenge</h2>
-    <span class="section-count" id="drill-count">3 drills</span>
+    <div class="section-actions">
+      <span class="section-count" id="drill-count">3 drills</span>
+      <button class="shuffle-btn" id="shuffle-btn" onclick="shuffleDrills()" aria-label="Shuffle drills">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>
+        Shuffle
+      </button>
+    </div>
   </div>
 
   <section class="drill-list" id="drill-list"></section>
@@ -142,12 +137,28 @@ function openFeatured() {
 
 function setFilter(cat) {
   activeCategory = cat;
-  var pills = document.querySelectorAll('.filter-pill');
-  pills.forEach(function(p) {
-    if (p.getAttribute('data-cat') === cat) p.classList.add('active');
-    else p.classList.remove('active');
+  document.querySelectorAll('.filter-pill').forEach(function(p) {
+    p.classList.toggle('active', p.getAttribute('data-cat') === cat);
   });
   renderDrills();
+}
+
+function shuffleDrills() {
+  if (allProblems.length < 2) return;
+  // Rotate/shuffle so the visible order always visibly changes
+  var firstId = allProblems[0].id;
+  for (var i = allProblems.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var tmp = allProblems[i];
+    allProblems[i] = allProblems[j];
+    allProblems[j] = tmp;
+  }
+  if (allProblems[0].id === firstId) {
+    allProblems.push(allProblems.shift());
+  }
+  renderFeatured(allProblems[0]);
+  renderDrills();
+  showToast('Drills shuffled');
 }
 
 function renderFeatured(problem) {
@@ -184,6 +195,18 @@ function renderDrills() {
   });
 }
 
+function loadStreak() {
+  fetch(getBackendUrl() + '/api/sessions')
+    .then(function(r) { return r.ok ? r.json() : []; })
+    .then(function(list) {
+      var days = computeStreakDays(list);
+      document.getElementById('streak-pill').textContent = days > 0 ? days + '-day streak' : 'Start streak';
+    })
+    .catch(function() {
+      document.getElementById('streak-pill').textContent = 'Commute ready';
+    });
+}
+
 function initDrills() {
   fetch(getBackendUrl() + '/api/problems')
     .then(function(res) {
@@ -192,17 +215,18 @@ function initDrills() {
     })
     .then(function(data) {
       setOfflineBadge(false);
-      allProblems = Array.isArray(data) && data.length ? data : VOCL_FALLBACK_PROBLEMS;
+      allProblems = Array.isArray(data) && data.length ? data : VOCL_FALLBACK_PROBLEMS.slice();
       var featured = allProblems.find(function(p) { return p.id === 'longest-palindrome'; }) || allProblems[0];
       renderFeatured(featured);
       renderDrills();
     })
     .catch(function() {
       setOfflineBadge(true);
-      allProblems = VOCL_FALLBACK_PROBLEMS;
+      allProblems = VOCL_FALLBACK_PROBLEMS.slice();
       renderFeatured(allProblems[0]);
       renderDrills();
     });
+  loadStreak();
 }
 
 initDrills();

@@ -77,6 +77,40 @@ function stopSession() {
     }
 }
 
+function setMicMuted(muted) {
+    if (window.VoclNative && typeof window.VoclNative.setMuted === 'function') {
+        window.VoclNative.setMuted(Boolean(muted));
+    }
+}
+
+function showToast(message) {
+    var existing = document.getElementById('vocl-toast');
+    if (!existing) {
+        existing = document.createElement('div');
+        existing.id = 'vocl-toast';
+        existing.className = 'vocl-toast';
+        document.body.appendChild(existing);
+    }
+    existing.textContent = message;
+    existing.classList.add('show');
+    clearTimeout(window._voclToastTimer);
+    window._voclToastTimer = setTimeout(function() {
+        existing.classList.remove('show');
+    }, 2400);
+}
+
+function computeStreakDays(sessions) {
+    if (!Array.isArray(sessions) || sessions.length === 0) return 0;
+    var days = {};
+    sessions.forEach(function(s) {
+        var d = s && s.timestamp_utc ? new Date(s.timestamp_utc) : new Date();
+        if (!isNaN(d.getTime())) {
+            days[d.toDateString()] = true;
+        }
+    });
+    return Math.max(1, Object.keys(days).length);
+}
+
 function getFallbackProblemById(id) {
     for (var i = 0; i < VOCL_FALLBACK_PROBLEMS.length; i++) {
         if (VOCL_FALLBACK_PROBLEMS[i].id === id) return VOCL_FALLBACK_PROBLEMS[i];
@@ -146,16 +180,13 @@ function renderBottomNav(activeTab) {
         }
     ];
 
-    var html = '<nav class="vocl-bottom-nav" style="position:fixed;left:0;right:0;bottom:0;z-index:50;background:#000000;border-top:1px solid rgba(255,255,255,0.10);padding-bottom:env(safe-area-inset-bottom,0px);">';
-    html += '<div style="height:64px;display:flex;align-items:center;justify-content:space-around;max-width:520px;margin:0 auto;padding:0 12px;">';
+    var html = '<nav class="vocl-bottom-nav"><div class="vocl-bottom-nav-inner">';
 
     tabs.forEach(function(tab) {
-        var isActive = tab.id === activeTab;
-        var color = isActive ? '#28D763' : '#8E8E93';
-        var weight = isActive ? '600' : '500';
-        html += '<a onclick="navigateTo(\'' + tab.page + '\')" style="flex:1;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:' + color + ';text-decoration:none;cursor:pointer;-webkit-tap-highlight-color:transparent;">';
+        var cls = 'vocl-nav-tab' + (tab.id === activeTab ? ' active' : '');
+        html += '<a class="' + cls + '" onclick="navigateTo(\'' + tab.page + '\')">';
         html += tab.icon;
-        html += '<span style="font-size:11px;font-weight:' + weight + ';letter-spacing:-0.01em;">' + tab.label + '</span>';
+        html += '<span>' + tab.label + '</span>';
         html += '</a>';
     });
 
