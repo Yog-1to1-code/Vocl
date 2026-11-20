@@ -81,11 +81,7 @@
 
 <script>
 function loadSessionStats() {
-  fetch(getBackendUrl() + '/api/sessions')
-    .then(function(res) {
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      return res.json();
-    })
+  voclApiJson('/api/sessions')
     .then(function(list) {
       var sessions = Array.isArray(list) ? list : [];
       var days = computeStreakDays(sessions);
@@ -107,11 +103,7 @@ function resetDemoSessions() {
   btn.disabled = true;
   btn.textContent = 'Clearing…';
 
-  fetch(getBackendUrl() + '/api/sessions', { method: 'DELETE' })
-    .then(function(res) {
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      return res.json();
-    })
+  voclApiJson('/api/sessions', 'DELETE')
     .then(function() {
       localStorage.removeItem('voclSessions');
       localStorage.removeItem('lastAutopsy');

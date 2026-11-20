@@ -206,11 +206,7 @@ function renderProblem(p) {
 }
 
 function loadProblem() {
-  fetch(getBackendUrl() + '/api/problems/' + encodeURIComponent(problemId))
-    .then(function(res) {
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      return res.json();
-    })
+  voclApiJson('/api/problems/' + encodeURIComponent(problemId))
     .then(function(p) {
       setOfflineBadge(false);
       renderProblem(p);

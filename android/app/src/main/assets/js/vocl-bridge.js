@@ -66,6 +66,30 @@ function getBackendUrl() {
     return 'http://10.0.2.2:8080';
 }
 
+function voclApiJson(path, method) {
+    var verb = method || 'GET';
+    if (window.VoclNative && typeof window.VoclNative.apiRequest === 'function') {
+        return new Promise(function(resolve, reject) {
+            setTimeout(function() {
+                try {
+                    var body = window.VoclNative.apiRequest(verb, path);
+                    if (body == null) {
+                        reject(new Error('Native API request failed: ' + path));
+                        return;
+                    }
+                    resolve(JSON.parse(body));
+                } catch (err) {
+                    reject(err);
+                }
+            }, 0);
+        });
+    }
+    return fetch(getBackendUrl() + path, { method: verb }).then(function(res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+    });
+}
+
 function startSession(problemId) {
     if (window.VoclNative && typeof window.VoclNative.startSession === 'function') {
         window.VoclNative.startSession(problemId);

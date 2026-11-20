@@ -27,10 +27,12 @@ public final class AudioStreamEngine {
     public synchronized void initCapture() {
         releaseCapture();
         int minBuffer = AudioRecord.getMinBufferSize(CAPTURE_RATE, CHANNEL_IN, ENCODING);
-        int bufferSize = Math.max(minBuffer, CAPTURE_CHUNK_BYTES * 4);
+        int bufferSize = Math.max(minBuffer * 2, 6400);
+        // AudioSource.MIC avoids OEM HAL muting seen with VOICE_COMMUNICATION outside VoIP call mode
         audioRecord = new AudioRecord(
-                MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+                MediaRecorder.AudioSource.MIC,
                 CAPTURE_RATE, CHANNEL_IN, ENCODING, bufferSize);
+        Log.i(TAG, "AudioRecord initialized: state=" + audioRecord.getState() + " buf=" + bufferSize);
     }
 
     public synchronized void initPlayback() {
@@ -54,6 +56,23 @@ public final class AudioStreamEngine {
         if (audioRecord != null && audioRecord.getState() == AudioRecord.STATE_INITIALIZED) {
             audioRecord.startRecording();
         }
+    }
+
+    public synchronized void restartCapture() {
+        Log.w(TAG, "Restarting AudioRecord after sustained zero-PCM reads");
+        if (audioRecord != null && audioRecord.getState() == AudioRecord.STATE_INITIALIZED) {
+            try {
+                if (audioRecord.getRecordingState() == AudioRecord.RECORDSTATE_RECORDING) {
+                    audioRecord.stop();
+                }
+                audioRecord.startRecording();
+                return;
+            } catch (Exception e) {
+                Log.w(TAG, "AudioRecord fast restart failed; re-initializing", e);
+            }
+        }
+        initCapture();
+        startCapture();
     }
 
     public synchronized void startPlayback() {

@@ -19,13 +19,26 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import android.util.Log;
+
 import org.json.JSONObject;
+
+import java.util.concurrent.TimeUnit;
+
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 
 public class MainActivity extends AppCompatActivity {
 
+    private static final String TAG = "MainActivity";
     private static final int PERMISSION_REQUEST_CODE = 100;
     private WebView webView;
     private String deliveredAutopsyJson;
+    private final OkHttpClient apiClient = new OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .build();
 
     private final BroadcastReceiver stateReceiver = new BroadcastReceiver() {
         @Override
@@ -69,7 +82,9 @@ public class MainActivity extends AppCompatActivity {
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setAllowFileAccess(true);
         // Allow file:///android_asset/ screens to fetch() our HTTPS backend on all OEM WebViews
+        settings.setAllowFileAccessFromFileURLs(true);
         settings.setAllowUniversalAccessFromFileURLs(true);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
 
         webView.addJavascriptInterface(new VoclBridge(), "VoclNative");
 
@@ -231,6 +246,27 @@ public class MainActivity extends AppCompatActivity {
         @JavascriptInterface
         public void setMuted(boolean muted) {
             VoclAudioService.setMicMuted(muted);
+        }
+
+        // Native OkHttp proxy bypasses WebView file:// CORS/origin quirks on real phones
+        @JavascriptInterface
+        public String apiRequest(String method, String path) {
+            String url = BackendConfig.BASE_HTTP_URL + path;
+            Request.Builder builder = new Request.Builder().url(url);
+            if ("DELETE".equalsIgnoreCase(method)) {
+                builder.delete();
+            } else {
+                builder.get();
+            }
+            try (Response resp = apiClient.newCall(builder.build()).execute()) {
+                if (resp.isSuccessful() && resp.body() != null) {
+                    return resp.body().string();
+                }
+                Log.w(TAG, "apiRequest " + method + " " + url + " -> HTTP " + resp.code());
+            } catch (Exception e) {
+                Log.e(TAG, "apiRequest " + method + " " + url + " failed: " + e.getMessage(), e);
+            }
+            return null;
         }
     }
 }

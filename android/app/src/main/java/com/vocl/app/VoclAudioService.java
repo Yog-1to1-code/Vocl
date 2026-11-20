@@ -1,15 +1,20 @@
 package com.vocl.app;
 
+import android.Manifest;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.ServiceInfo;
+import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -115,8 +120,20 @@ public class VoclAudioService extends Service {
             return START_NOT_STICKY;
         }
 
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
+            Log.e(TAG, "RECORD_AUDIO permission missing; cannot start microphone FGS");
+            broadcastState("error");
+            stopSelf();
+            return START_NOT_STICKY;
+        }
+
         Notification notification = buildNotification();
-        startForeground(1, notification);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
+        } else {
+            startForeground(1, notification);
+        }
 
         acquireWakeLock();
         startAudioSession(problemId);
@@ -193,11 +210,36 @@ public class VoclAudioService extends Service {
 
     private void startCaptureLoop(WebSocket ws) {
         captureThread = new Thread(() -> {
+            long totalBytesSent = 0;
+            int chunkCount = 0;
+            int consecutiveZeroChunks = 0;
+            boolean loggedFirstNonZero = false;
+
             while (isRunning && !Thread.currentThread().isInterrupted()) {
                 byte[] chunk = audioEngine.readCaptureChunk();
                 if (chunk != null && isRunning) {
                     if (!micMuted) {
+                        double rms = computePcm16Rms(chunk);
+                        if (rms > 0.0) {
+                            consecutiveZeroChunks = 0;
+                            if (!loggedFirstNonZero) {
+                                loggedFirstNonZero = true;
+                                Log.i(TAG, String.format("First non-zero mic chunk: %d bytes, rms=%.1f", chunk.length, rms));
+                            }
+                        } else {
+                            consecutiveZeroChunks++;
+                            if (consecutiveZeroChunks == 12) {
+                                // ~1.2s of all-zero PCM on OEM hardware -> bounce AudioRecord
+                                consecutiveZeroChunks = 0;
+                                audioEngine.restartCapture();
+                            }
+                        }
                         ws.send(ByteString.of(chunk));
+                        totalBytesSent += chunk.length;
+                        chunkCount++;
+                        if (chunkCount % 50 == 0) {
+                            Log.i(TAG, String.format("Upstream mic stream: %d bytes sent (last rms=%.1f)", totalBytesSent, rms));
+                        }
                     }
                 } else if (isRunning) {
                     try {
@@ -210,6 +252,17 @@ public class VoclAudioService extends Service {
             }
         }, "vocl-capture");
         captureThread.start();
+    }
+
+    private static double computePcm16Rms(byte[] pcm) {
+        int samples = pcm.length / 2;
+        if (samples == 0) return 0.0;
+        double sumSq = 0.0;
+        for (int i = 0; i + 1 < pcm.length; i += 2) {
+            short s = (short) ((pcm[i] & 0xFF) | (pcm[i + 1] << 8));
+            sumSq += (double) s * s;
+        }
+        return Math.sqrt(sumSq / samples);
     }
 
     private void handleTextMessage(String text) {

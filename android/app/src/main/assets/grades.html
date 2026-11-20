@@ -1,397 +1,676 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>Vocl · Grades</title>
-<link rel="stylesheet" href="css/vocl-theme.css">
-<style>
-  .top-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-top: 4px; }
-  .title-block { display: flex; flex-direction: column; gap: 6px; }
-  .page-title { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; }
-  .page-sub { font-size: 15px; color: var(--muted); }
+  <meta charset="utf-8">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Vocl · Grades</title>
+  <link rel="stylesheet" href="css/vocl-theme.css">
+  <style>
+    .top-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding-top: 4px;
+    }
 
-  .summary-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
-  .summary-left { display: flex; flex-direction: column; gap: 6px; }
-  .avg-wrap { display: flex; align-items: baseline; gap: 10px; }
-  .avg-score { font-size: 46px; font-weight: 700; color: var(--green); line-height: 1; letter-spacing: -0.03em; }
-  .avg-caption { font-size: 13px; color: var(--muted); }
+    .title-block {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
 
-  .trend-col { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
-  .trend-delta { font-size: 13px; font-weight: 600; color: var(--green); }
-  .mini-bars { display: flex; align-items: flex-end; gap: 6px; height: 48px; }
-  .mini-bar { width: 11px; border-radius: 4px; background: var(--green-dim); transition: height 0.3s ease; }
-  .mini-bar.latest { background: var(--green); }
+    .page-title {
+      font-size: 30px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
 
-  .empty-card {
-    text-align: center; align-items: center; padding: 32px 22px; gap: 12px;
-  }
-  .empty-title { font-size: 19px; font-weight: 700; }
-  .empty-sub { font-size: 14px; color: var(--muted); line-height: 1.5; max-width: 280px; }
-  .empty-cta {
-    margin-top: 6px; padding: 12px 22px; border: none; border-radius: var(--radius-pill);
-    background: var(--green); color: #000000; font-size: 14px; font-weight: 700; cursor: pointer;
-  }
+    .page-sub {
+      font-size: 15px;
+      color: var(--muted);
+    }
 
-  .autopsy-header { display: flex; flex-direction: column; gap: 8px; }
-  .autopsy-top { display: flex; align-items: baseline; justify-content: space-between; }
-  .section-title { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
-  .date-label { font-size: 13px; color: var(--muted); }
-  .autopsy-prob-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .autopsy-prob { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
-  .autopsy-score { font-size: 28px; font-weight: 700; color: var(--green); line-height: 1; }
-  .autopsy-meta { font-size: 13px; color: var(--muted); }
+    .summary-row {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+    }
 
-  .complexity-grid { display: grid; grid-template-columns: 1fr 1px 1fr; gap: 16px; align-items: start; }
-  .v-divider { background: var(--surface-border); height: 100%; min-height: 54px; }
-  .comp-col { display: flex; flex-direction: column; gap: 6px; }
-  .comp-label { font-size: 13px; color: var(--muted); }
-  .comp-val { font-size: 15px; font-weight: 600; word-break: break-word; }
-  .comp-val.yours { color: var(--amber); }
-  .comp-val.optimal { color: var(--green); }
-  .comp-sub { font-size: 11px; color: #636368; }
+    .summary-left {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
 
-  .edge-list { display: flex; flex-wrap: wrap; gap: 8px; }
-  .edge-chip {
-    padding: 5px 11px; border-radius: var(--radius-pill);
-    background: rgba(255, 159, 10, 0.10); border: 1px solid rgba(255, 159, 10, 0.30);
-    color: var(--amber); font-size: 12px; font-weight: 500;
-  }
+    .avg-wrap {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
 
-  .stand-section { display: flex; flex-direction: column; gap: 14px; }
-  .metric-row { display: grid; grid-template-columns: 138px 1fr 40px; align-items: center; gap: 12px; }
-  .metric-name { font-size: 14px; color: #B4B4BC; }
-  .bar-track { height: 5px; border-radius: 9999px; background: #26262A; overflow: hidden; }
-  .bar-fill { height: 100%; border-radius: 9999px; transition: width 0.3s ease; }
-  .metric-val { font-size: 13px; font-weight: 700; text-align: right; }
+    .avg-score {
+      font-size: 46px;
+      font-weight: 700;
+      color: var(--green);
+      line-height: 1;
+      letter-spacing: -0.03em;
+    }
 
-  .next-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: var(--amber); text-transform: uppercase; }
-  .next-text { font-size: 14.5px; line-height: 1.48; color: #E5E5EA; }
+    .avg-caption {
+      font-size: 13px;
+      color: var(--muted);
+    }
 
-  .all-sessions-btn {
-    display: flex; align-items: center; justify-content: space-between;
-    color: var(--green); font-size: 15px; font-weight: 600;
-    background: transparent; border: none; padding: 4px 0; cursor: pointer; width: 100%;
-  }
-  .history-list { display: none; flex-direction: column; gap: 10px; }
-  .history-list.open { display: flex; }
-  .history-item {
-    background: var(--surface); border: 1px solid var(--surface-border); border-radius: 14px;
-    padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    cursor: pointer; transition: border-color 0.15s ease, transform 0.15s ease;
-  }
-  .history-item:active { transform: scale(0.985); }
-  .history-item.selected { border-color: var(--green); }
-  .history-title { font-size: 14.5px; font-weight: 600; color: #FFFFFF; }
-  .history-meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
-  .history-score { font-size: 18px; font-weight: 700; color: var(--green); }
-</style>
-<script src="js/vocl-bridge.js"></script>
+    .trend-col {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 10px;
+    }
+
+    .trend-delta {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--green);
+    }
+
+    .mini-bars {
+      display: flex;
+      align-items: flex-end;
+      gap: 6px;
+      height: 48px;
+    }
+
+    .mini-bar {
+      width: 11px;
+      border-radius: 4px;
+      background: var(--green-dim);
+      transition: height 0.3s ease;
+    }
+
+    .mini-bar.latest {
+      background: var(--green);
+    }
+
+    .empty-card {
+      text-align: center;
+      align-items: center;
+      padding: 32px 22px;
+      gap: 12px;
+    }
+
+    .empty-title {
+      font-size: 19px;
+      font-weight: 700;
+    }
+
+    .empty-sub {
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.5;
+      max-width: 280px;
+    }
+
+    .empty-cta {
+      margin-top: 6px;
+      padding: 12px 22px;
+      border: none;
+      border-radius: var(--radius-pill);
+      background: var(--green);
+      color: #000000;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .autopsy-header {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .autopsy-top {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+    }
+
+    .section-title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .date-label {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .autopsy-prob-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .autopsy-prob {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .autopsy-score {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--green);
+      line-height: 1;
+    }
+
+    .autopsy-meta {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .complexity-grid {
+      display: grid;
+      grid-template-columns: 1fr 1px 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .v-divider {
+      background: var(--surface-border);
+      height: 100%;
+      min-height: 54px;
+    }
+
+    .comp-col {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .comp-label {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .comp-val {
+      font-size: 15px;
+      font-weight: 600;
+      word-break: break-word;
+    }
+
+    .comp-val.yours {
+      color: var(--amber);
+    }
+
+    .comp-val.optimal {
+      color: var(--green);
+    }
+
+    .comp-sub {
+      font-size: 11px;
+      color: #636368;
+    }
+
+    .edge-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .edge-chip {
+      padding: 5px 11px;
+      border-radius: var(--radius-pill);
+      background: rgba(255, 159, 10, 0.10);
+      border: 1px solid rgba(255, 159, 10, 0.30);
+      color: var(--amber);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .stand-section {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .metric-row {
+      display: grid;
+      grid-template-columns: 138px 1fr 40px;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .metric-name {
+      font-size: 14px;
+      color: #B4B4BC;
+    }
+
+    .bar-track {
+      height: 5px;
+      border-radius: 9999px;
+      background: #26262A;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 9999px;
+      transition: width 0.3s ease;
+    }
+
+    .metric-val {
+      font-size: 13px;
+      font-weight: 700;
+      text-align: right;
+    }
+
+    .next-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--amber);
+      text-transform: uppercase;
+    }
+
+    .next-text {
+      font-size: 14.5px;
+      line-height: 1.48;
+      color: #E5E5EA;
+    }
+
+    .all-sessions-btn {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--green);
+      font-size: 15px;
+      font-weight: 600;
+      background: transparent;
+      border: none;
+      padding: 4px 0;
+      cursor: pointer;
+      width: 100%;
+    }
+
+    .history-list {
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .history-list.open {
+      display: flex;
+    }
+
+    .history-item {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 14px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      cursor: pointer;
+      transition: border-color 0.15s ease, transform 0.15s ease;
+    }
+
+    .history-item:active {
+      transform: scale(0.985);
+    }
+
+    .history-item.selected {
+      border-color: var(--green);
+    }
+
+    .history-title {
+      font-size: 14.5px;
+      font-weight: 600;
+      color: #FFFFFF;
+    }
+
+    .history-meta {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 3px;
+    }
+
+    .history-score {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--green);
+    }
+  </style>
+  <script src="js/vocl-bridge.js"></script>
 </head>
+
 <body>
 
-<main class="page">
-  <header class="top-row">
-    <div class="title-block">
-      <h1 class="page-title">Your grades</h1>
-      <p class="page-sub">Less guessing. More evidence.</p>
-    </div>
-    <div class="streak-pill" id="streak-pill">0-day streak</div>
-  </header>
+  <main class="page">
+    <header class="top-row">
+      <div class="title-block">
+        <h1 class="page-title">Your grades</h1>
+        <p class="page-sub">Less guessing. More evidence.</p>
+      </div>
+      <div class="streak-pill" id="streak-pill">0-day streak</div>
+    </header>
 
-  <section class="card empty-card" id="empty-state" style="display:none;">
-    <div class="empty-title">No graded sessions yet</div>
-    <p class="empty-sub">Complete a voice drill to unlock your Big-O autopsy, missed edge cases, and Socratic coaching report.</p>
-    <button class="empty-cta" onclick="navigateTo('drills.html')">Start your first drill</button>
-  </section>
+    <section class="card empty-card" id="empty-state" style="display:none;">
+      <div class="empty-title">No graded sessions yet</div>
+      <p class="empty-sub">Complete a voice drill to unlock your Big-O autopsy, missed edge cases, and Socratic coaching
+        report.</p>
+      <button class="empty-cta" onclick="navigateTo('drills.html')">Start your first drill</button>
+    </section>
 
-  <div id="grades-content" style="display:flex;flex-direction:column;gap:20px;">
-    <section class="card">
-      <div class="summary-row">
-        <div class="summary-left">
-          <span class="card-label mono">LAST 5 SESSIONS</span>
-          <div class="avg-wrap">
-            <span class="avg-score mono" id="avg-score">--</span>
-            <span class="avg-caption">avg. score</span>
+    <div id="grades-content" style="display:flex;flex-direction:column;gap:20px;">
+      <section class="card">
+        <div class="summary-row">
+          <div class="summary-left">
+            <span class="card-label mono">LAST 5 SESSIONS</span>
+            <div class="avg-wrap">
+              <span class="avg-score mono" id="avg-score">--</span>
+              <span class="avg-caption">avg. score</span>
+            </div>
+          </div>
+          <div class="trend-col">
+            <span class="trend-delta mono" id="trend-delta">Ready</span>
+            <div class="mini-bars" id="mini-bars"></div>
           </div>
         </div>
-        <div class="trend-col">
-          <span class="trend-delta mono" id="trend-delta">Ready</span>
-          <div class="mini-bars" id="mini-bars"></div>
-        </div>
-      </div>
-    </section>
+      </section>
 
-    <section class="card" id="autopsy-card">
-      <div class="autopsy-header">
-        <div class="autopsy-top">
-          <h2 class="section-title" id="autopsy-heading">Latest autopsy</h2>
-          <span class="date-label" id="autopsy-date">No sessions yet</span>
+      <section class="card" id="autopsy-card">
+        <div class="autopsy-header">
+          <div class="autopsy-top">
+            <h2 class="section-title" id="autopsy-heading">Latest autopsy</h2>
+            <span class="date-label" id="autopsy-date">No sessions yet</span>
+          </div>
+          <div class="autopsy-prob-row">
+            <span class="autopsy-prob" id="autopsy-title">—</span>
+            <span class="autopsy-score mono" id="autopsy-score">--</span>
+          </div>
+          <div class="autopsy-meta" id="autopsy-meta">—</div>
         </div>
-        <div class="autopsy-prob-row">
-          <span class="autopsy-prob" id="autopsy-title">—</span>
-          <span class="autopsy-score mono" id="autopsy-score">--</span>
-        </div>
-        <div class="autopsy-meta" id="autopsy-meta">—</div>
-      </div>
 
-      <div class="divider"></div>
-
-      <span class="card-label mono">COMPLEXITY</span>
-      <div class="complexity-grid">
-        <div class="comp-col">
-          <span class="comp-label">Your approach</span>
-          <span class="comp-val yours mono" id="your-complexity">—</span>
-          <span class="comp-sub">time / space</span>
-        </div>
-        <div class="v-divider"></div>
-        <div class="comp-col">
-          <span class="comp-label">Optimal</span>
-          <span class="comp-val optimal mono" id="optimal-complexity">—</span>
-        </div>
-      </div>
-
-      <div id="edge-cases-card" style="display:none;flex-direction:column;gap:10px;">
         <div class="divider"></div>
-        <span class="card-label mono">MISSED EDGE CASES</span>
-        <div class="edge-list" id="edge-cases-list"></div>
-      </div>
 
-      <div class="divider"></div>
-
-      <div class="stand-section">
-        <span class="card-label mono">WHERE YOU STAND</span>
-
-        <div class="metric-row">
-          <span class="metric-name">Problem &amp; approach</span>
-          <div class="bar-track"><div class="bar-fill" id="bar-correctness" style="width:0%;background:#28D763;"></div></div>
-          <span class="metric-val mono" id="val-correctness" style="color:#28D763;">-/10</span>
+        <span class="card-label mono">COMPLEXITY</span>
+        <div class="complexity-grid">
+          <div class="comp-col">
+            <span class="comp-label">Your approach</span>
+            <span class="comp-val yours mono" id="your-complexity">—</span>
+            <span class="comp-sub">time / space</span>
+          </div>
+          <div class="autopsy-prob-row">
+            <span class="autopsy-prob" id="autopsy-title">—</span>
+            <span class="autopsy-score mono" id="autopsy-score">--</span>
+          </div>
         </div>
-        <div class="metric-row">
-          <span class="metric-name">Complexity rigor</span>
-          <div class="bar-track"><div class="bar-fill" id="bar-complexity" style="width:0%;background:#0A84FF;"></div></div>
-          <span class="metric-val mono" id="val-complexity" style="color:#9AB8FF;">-/10</span>
+
+        <div id="edge-cases-card" style="display:none;flex-direction:column;gap:10px;">
+          <div class="divider"></div>
+          <span class="card-label mono">MISSED EDGE CASES</span>
+          <div class="edge-list" id="edge-cases-list"></div>
         </div>
-        <div class="metric-row">
-          <span class="metric-name">Edge-case coverage</span>
-          <div class="bar-track"><div class="bar-fill" id="bar-edge" style="width:0%;background:#FF9F0A;"></div></div>
-          <span class="metric-val mono" id="val-edge" style="color:#FF9F0A;">-/10</span>
+
+        <div class="divider"></div>
+
+        <div class="stand-section">
+          <span class="card-label mono">WHERE YOU STAND</span>
+
+          <div class="metric-row">
+            <span class="metric-name">Problem &amp; approach</span>
+            <div class="bar-track">
+              <div class="bar-fill" id="bar-correctness" style="width:0%;background:#28D763;"></div>
+            </div>
+            <span class="metric-val mono" id="val-correctness" style="color:#28D763;">-/10</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-name">Complexity rigor</span>
+            <div class="bar-track">
+              <div class="bar-fill" id="bar-complexity" style="width:0%;background:#0A84FF;"></div>
+            </div>
+            <span class="metric-val mono" id="val-complexity" style="color:#9AB8FF;">-/10</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-name">Edge-case coverage</span>
+            <div class="bar-track">
+              <div class="bar-fill" id="bar-edge" style="width:0%;background:#FF9F0A;"></div>
+            </div>
+            <span class="metric-val mono" id="val-edge" style="color:#FF9F0A;">-/10</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-name">Communication</span>
+            <div class="bar-track">
+              <div class="bar-fill" id="bar-comm" style="width:0%;background:#28D763;"></div>
+            </div>
+            <span class="metric-val mono" id="val-comm" style="color:#28D763;">-/10</span>
+          </div>
         </div>
-        <div class="metric-row">
-          <span class="metric-name">Communication</span>
-          <div class="bar-track"><div class="bar-fill" id="bar-comm" style="width:0%;background:#28D763;"></div></div>
-          <span class="metric-val mono" id="val-comm" style="color:#28D763;">-/10</span>
-        </div>
-      </div>
 
-      <div class="divider"></div>
+        <div class="divider"></div>
 
-      <span class="next-label mono">NEXT TIME</span>
-      <p class="next-text" id="next-time-text">Complete your first audio session to get targeted coaching on complexity and missed edge cases.</p>
-    </section>
+        <span class="next-label mono">NEXT TIME</span>
+        <p class="next-text" id="next-time-text">Complete your first audio session to get targeted coaching on
+          complexity and missed edge cases.</p>
+      </section>
 
-    <button class="all-sessions-btn" onclick="toggleHistory()">
-      <span id="history-toggle-label">View all sessions</span>
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
-    </button>
+      <section class="card">
+        <span class="next-label mono">NEXT TIME</span>
+        <p class="next-text" id="next-time-text">Complete your first audio session to get targeted coaching on
+          complexity and missed edge cases.</p>
+      </section>
 
-    <section class="history-list" id="history-list"></section>
-  </div>
-</main>
+      <button class="all-sessions-btn" onclick="toggleHistory()">
+        <span id="history-toggle-label">View all sessions</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+          <polyline points="12 5 19 12 12 19"></polyline>
+        </svg>
+      </button>
 
-<script>renderBottomNav('grades');</script>
+      <section class="history-list" id="history-list"></section>
+    </div>
+  </main>
 
-<script>
-var allSessions = [];
-var selectedIndex = -1;
+  <script>renderBottomNav('grades');</script>
 
-function normalizeScore(raw) {
-  var n = parseFloat(raw);
-  if (isNaN(n)) return 0;
-  return n <= 10 ? Math.round(n * 10) : Math.round(n);
-}
+  <script>
+    var allSessions = [];
+    var selectedIndex = -1;
 
-function formatDateLabel(ts) {
-  if (!ts) return 'Recent';
-  var d = new Date(ts);
-  if (isNaN(d.getTime())) return 'Recent';
-  var today = new Date();
-  if (d.toDateString() === today.toDateString()) return 'Today';
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
+    function normalizeScore(raw) {
+      var n = parseFloat(raw);
+      if (isNaN(n)) return 0;
+      return n <= 10 ? Math.round(n * 10) : Math.round(n);
+    }
 
-function parseEdgeCases(raw) {
-  if (Array.isArray(raw)) return raw.filter(Boolean);
-  if (!raw) return [];
-  return String(raw).split(';').map(function(s) { return s.trim(); }).filter(Boolean);
-}
+    function formatDateLabel(ts) {
+      if (!ts) return 'Recent';
+      var d = new Date(ts);
+      if (isNaN(d.getTime())) return 'Recent';
+      var today = new Date();
+      if (d.toDateString() === today.toDateString()) return 'Today';
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
 
-function toggleHistory() {
-  document.getElementById('history-list').classList.toggle('open');
-}
+    function parseEdgeCases(raw) {
+      if (Array.isArray(raw)) return raw.filter(Boolean);
+      if (!raw) return [];
+      return String(raw).split(';').map(function (s) { return s.trim(); }).filter(Boolean);
+    }
 
-function renderSelectedAutopsy(index) {
-  selectedIndex = index;
-  var session = allSessions[index];
-  if (!session) return;
+    function toggleHistory() {
+      document.getElementById('history-list').classList.toggle('open');
+    }
 
-  var isLatest = index === allSessions.length - 1;
-  var prob = getFallbackProblemById(session.problem_id);
-  var score = normalizeScore(session.score);
-  var mins = Math.max(1, Math.round((parseInt(session.duration_sec, 10) || 60) / 60));
-  var isOptimal = session.is_optimal === true || String(session.is_optimal).toLowerCase() === 'true';
+    function renderSelectedAutopsy(index) {
+      selectedIndex = index;
+      var session = allSessions[index];
+      if (!session) return;
 
-  document.getElementById('autopsy-heading').textContent = isLatest ? 'Latest autopsy' : 'Session autopsy';
-  document.getElementById('autopsy-date').textContent = formatDateLabel(session.timestamp_utc);
-  document.getElementById('autopsy-title').textContent = prob ? prob.title : session.problem_id;
-  document.getElementById('autopsy-score').textContent = score;
-  document.getElementById('autopsy-meta').textContent = mins + ' min · ' + (prob ? prob.category : 'Drill') + ' · ' + (isOptimal ? 'Optimal' : 'Suboptimal');
+      var isLatest = index === allSessions.length - 1;
+      var prob = getFallbackProblemById(session.problem_id);
+      var score = normalizeScore(session.score);
+      var mins = Math.max(1, Math.round((parseInt(session.duration_sec, 10) || 60) / 60));
+      var isOptimal = session.is_optimal === true || String(session.is_optimal).toLowerCase() === 'true';
 
-  document.getElementById('your-complexity').textContent = session.final_complexity || 'Not evaluated';
-  document.getElementById('optimal-complexity').textContent = prob ? prob.optimal_complexity : 'O(N)';
+      document.getElementById('autopsy-heading').textContent = isLatest ? 'Latest autopsy' : 'Session autopsy';
+      document.getElementById('autopsy-date').textContent = formatDateLabel(session.timestamp_utc);
+      document.getElementById('autopsy-title').textContent = prob ? prob.title : session.problem_id;
+      document.getElementById('autopsy-score').textContent = score;
+      document.getElementById('autopsy-meta').textContent = mins + ' min · ' + (prob ? prob.category : 'Drill') + ' · ' + (isOptimal ? 'Optimal' : 'Suboptimal');
 
-  var edges = parseEdgeCases(session.missed_edge_cases);
-  var edgeCard = document.getElementById('edge-cases-card');
-  var edgeList = document.getElementById('edge-cases-list');
-  edgeList.innerHTML = '';
-  if (edges.length > 0) {
-    edgeCard.style.display = 'flex';
-    edges.forEach(function(item) {
-      var chip = document.createElement('span');
-      chip.className = 'edge-chip';
-      chip.textContent = item;
-      edgeList.appendChild(chip);
-    });
-  } else {
-    edgeCard.style.display = 'none';
-  }
+      document.getElementById('your-complexity').textContent = session.final_complexity || 'Not evaluated';
+      document.getElementById('optimal-complexity').textContent = prob ? prob.optimal_complexity : 'O(N)';
 
-  var hasRubric = session.correctness_score !== undefined && session.correctness_score !== '' && session.correctness_score !== null;
-  var corrTen = hasRubric ? Math.round(parseFloat(session.correctness_score) || 0) : Math.round(score / 10);
-  var compTen = hasRubric ? Math.round(parseFloat(session.complexity_score) || 0) : (isOptimal ? Math.max(8, Math.round(score / 10)) : Math.max(3, Math.round(score / 11)));
-  var edgeTen = hasRubric ? Math.round(parseFloat(session.edge_cases_score) || 0) : Math.max(2, 10 - edges.length * 2);
-  var commTen = hasRubric ? Math.round(parseFloat(session.communication_score) || 0) : Math.min(10, Math.max(4, Math.round((score + 10) / 11)));
+      var edges = parseEdgeCases(session.missed_edge_cases);
+      var edgeCard = document.getElementById('edge-cases-card');
+      var edgeList = document.getElementById('edge-cases-list');
+      edgeList.innerHTML = '';
+      if (edges.length > 0) {
+        edgeCard.style.display = 'flex';
+        edges.forEach(function (item) {
+          var chip = document.createElement('span');
+          chip.className = 'edge-chip';
+          chip.textContent = item;
+          edgeList.appendChild(chip);
+        });
+      } else {
+        edgeCard.style.display = 'none';
+      }
 
-  setMetric('correctness', corrTen);
-  setMetric('complexity', compTen);
-  setMetric('edge', edgeTen);
-  setMetric('comm', commTen);
+      var hasRubric = session.correctness_score !== undefined && session.correctness_score !== '' && session.correctness_score !== null;
+      var corrTen = hasRubric ? Math.round(parseFloat(session.correctness_score) || 0) : Math.round(score / 10);
+      var compTen = hasRubric ? Math.round(parseFloat(session.complexity_score) || 0) : (isOptimal ? Math.max(8, Math.round(score / 10)) : Math.max(3, Math.round(score / 11)));
+      var edgeTen = hasRubric ? Math.round(parseFloat(session.edge_cases_score) || 0) : Math.max(2, 10 - edges.length * 2);
+      var commTen = hasRubric ? Math.round(parseFloat(session.communication_score) || 0) : Math.min(10, Math.max(4, Math.round((score + 10) / 11)));
 
-  document.getElementById('next-time-text').textContent =
-    session.summary_feedback || 'Keep defending your time and space trade-offs out loud.';
+      setMetric('correctness', corrTen);
+      setMetric('complexity', compTen);
+      setMetric('edge', edgeTen);
+      setMetric('comm', commTen);
 
-  document.querySelectorAll('.history-item').forEach(function(el) {
-    el.classList.toggle('selected', Number(el.getAttribute('data-idx')) === index);
-  });
-}
+      document.getElementById('next-time-text').textContent =
+        session.summary_feedback || 'Keep defending your time and space trade-offs out loud.';
 
-function renderGrades(sessions) {
-  allSessions = Array.isArray(sessions) ? sessions : [];
-  var days = computeStreakDays(allSessions);
-  document.getElementById('streak-pill').textContent = days + '-day streak';
+      document.querySelectorAll('.history-item').forEach(function (el) {
+        el.classList.toggle('selected', Number(el.getAttribute('data-idx')) === index);
+      });
+    }
 
-  if (allSessions.length === 0) {
-    document.getElementById('empty-state').style.display = 'flex';
-    document.getElementById('grades-content').style.display = 'none';
-    return;
-  }
+    function renderGrades(sessions) {
+      allSessions = Array.isArray(sessions) ? sessions : [];
+      var days = computeStreakDays(allSessions);
+      document.getElementById('streak-pill').textContent = days + '-day streak';
 
-  document.getElementById('empty-state').style.display = 'none';
-  document.getElementById('grades-content').style.display = 'flex';
+      if (allSessions.length === 0) {
+        document.getElementById('empty-state').style.display = 'flex';
+        document.getElementById('grades-content').style.display = 'none';
+        return;
+      }
 
-  var recent = allSessions.slice(-5);
-  var scores = recent.map(function(s) { return normalizeScore(s.score); });
-  var avg = Math.round(scores.reduce(function(a, b) { return a + b; }, 0) / scores.length);
-  document.getElementById('avg-score').textContent = avg;
+      document.getElementById('empty-state').style.display = 'none';
+      document.getElementById('grades-content').style.display = 'flex';
 
-  if (scores.length >= 2) {
-    var diff = scores[scores.length - 1] - scores[0];
-    var sign = diff >= 0 ? '↑ +' : '↓ ';
-    document.getElementById('trend-delta').textContent = sign + Math.abs(diff) + ' pts';
-  } else {
-    document.getElementById('trend-delta').textContent = '1 session';
-  }
-  renderMiniBars(scores);
+      var recent = allSessions.slice(-5);
+      var scores = recent.map(function (s) { return normalizeScore(s.score); });
+      var avg = Math.round(scores.reduce(function (a, b) { return a + b; }, 0) / scores.length);
+      document.getElementById('avg-score').textContent = avg;
 
-  document.getElementById('history-toggle-label').textContent = 'View all sessions (' + allSessions.length + ')';
+      if (scores.length >= 2) {
+        var diff = scores[scores.length - 1] - scores[0];
+        var sign = diff >= 0 ? '↑ +' : '↓ ';
+        document.getElementById('trend-delta').textContent = sign + Math.abs(diff) + ' pts';
+      } else {
+        document.getElementById('trend-delta').textContent = '1 session';
+      }
+      renderMiniBars(scores);
 
-  var histEl = document.getElementById('history-list');
-  histEl.innerHTML = '';
-  for (var i = allSessions.length - 1; i >= 0; i--) {
-    (function(idx) {
-      var s = allSessions[idx];
-      var p = getFallbackProblemById(s.problem_id);
-      var sc = normalizeScore(s.score);
-      var m = Math.max(1, Math.round((parseInt(s.duration_sec, 10) || 60) / 60));
-      var item = document.createElement('div');
-      item.className = 'history-item';
-      item.setAttribute('data-idx', String(idx));
-      item.onclick = function() {
-        renderSelectedAutopsy(idx);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      };
-      item.innerHTML =
-        '<div>' +
-          '<div class="history-title">' + escapeHtml(p ? p.title : s.problem_id) + '</div>' +
-          '<div class="history-meta">' + escapeHtml(formatDateLabel(s.timestamp_utc)) + ' &middot; ' + m + ' min &middot; ' + escapeHtml(s.final_complexity || '—') + '</div>' +
-        '</div>' +
-        '<div class="history-score mono">' + sc + '</div>';
-      histEl.appendChild(item);
-    })(i);
-  }
+      document.getElementById('history-toggle-label').textContent = 'View all sessions (' + allSessions.length + ')';
 
-  renderSelectedAutopsy(allSessions.length - 1);
-}
+      var histEl = document.getElementById('history-list');
+      histEl.innerHTML = '';
+      for (var i = allSessions.length - 1; i >= 0; i--) {
+        (function (idx) {
+          var s = allSessions[idx];
+          var p = getFallbackProblemById(s.problem_id);
+          var sc = normalizeScore(s.score);
+          var m = Math.max(1, Math.round((parseInt(s.duration_sec, 10) || 60) / 60));
+          var item = document.createElement('div');
+          item.className = 'history-item';
+          item.setAttribute('data-idx', String(idx));
+          item.onclick = function () {
+            renderSelectedAutopsy(idx);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          };
+          item.innerHTML =
+            '<div>' +
+            '<div class="history-title">' + escapeHtml(p ? p.title : s.problem_id) + '</div>' +
+            '<div class="history-meta">' + escapeHtml(formatDateLabel(s.timestamp_utc)) + ' &middot; ' + m + ' min &middot; ' + escapeHtml(s.final_complexity || '—') + '</div>' +
+            '</div>' +
+            '<div class="history-score mono">' + sc + '</div>';
+          histEl.appendChild(item);
+        })(i);
+      }
 
-function setMetric(key, val) {
-  var clamped = Math.max(0, Math.min(10, val));
-  document.getElementById('bar-' + key).style.width = (clamped * 10) + '%';
-  document.getElementById('val-' + key).textContent = clamped + '/10';
-}
+      renderSelectedAutopsy(allSessions.length - 1);
+    }
 
-function renderMiniBars(scores) {
-  var container = document.getElementById('mini-bars');
-  container.innerHTML = '';
-  var padded = scores.slice();
-  while (padded.length < 5) padded.unshift(20);
-  padded.forEach(function(sc, idx) {
-    var bar = document.createElement('div');
-    bar.className = 'mini-bar' + (idx === padded.length - 1 ? ' latest' : '');
-    var h = Math.max(10, Math.min(46, Math.round((sc / 100) * 46)));
-    bar.style.height = h + 'px';
-    container.appendChild(bar);
-  });
-}
+    function setMetric(key, val) {
+      var clamped = Math.max(0, Math.min(10, val));
+      document.getElementById('bar-' + key).style.width = (clamped * 10) + '%';
+      document.getElementById('val-' + key).textContent = clamped + '/10';
+    }
 
-function loadLocalSessions() {
-  try {
-    var list = JSON.parse(localStorage.getItem('voclSessions') || '[]');
-    if (list.length > 0) return list;
-    var single = JSON.parse(localStorage.getItem('lastAutopsy') || 'null');
-    return single ? [single] : [];
-  } catch (e) {
-    return [];
-  }
-}
+    function renderMiniBars(scores) {
+      var container = document.getElementById('mini-bars');
+      container.innerHTML = '';
+      var padded = scores.slice();
+      while (padded.length < 5) padded.unshift(20);
+      padded.forEach(function (sc, idx) {
+        var bar = document.createElement('div');
+        bar.className = 'mini-bar' + (idx === padded.length - 1 ? ' latest' : '');
+        var h = Math.max(10, Math.min(46, Math.round((sc / 100) * 46)));
+        bar.style.height = h + 'px';
+        container.appendChild(bar);
+      });
+    }
 
-function initGrades() {
-  fetch(getBackendUrl() + '/api/sessions')
-    .then(function(res) {
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      return res.json();
-    })
-    .then(function(data) {
-      setOfflineBadge(false);
-      var list = Array.isArray(data) ? data : [];
-      renderGrades(list);
-    })
-    .catch(function() {
-      setOfflineBadge(true);
-      renderGrades(loadLocalSessions());
-    });
-}
+    function loadLocalSessions() {
+      try {
+        var list = JSON.parse(localStorage.getItem('voclSessions') || '[]');
+        if (list.length > 0) return list;
+        var single = JSON.parse(localStorage.getItem('lastAutopsy') || 'null');
+        return single ? [single] : [];
+      } catch (e) {
+        return [];
+      }
+    }
 
-initGrades();
-</script>
+    function initGrades() {
+      voclApiJson('/api/sessions')
+        .then(function (data) {
+          setOfflineBadge(false);
+          var list = Array.isArray(data) ? data : [];
+          renderGrades(list);
+        })
+        .catch(function () {
+          setOfflineBadge(true);
+          renderGrades(loadLocalSessions());
+        });
+    }
+
+    initGrades();
+  </script>
 </body>
+
 </html>

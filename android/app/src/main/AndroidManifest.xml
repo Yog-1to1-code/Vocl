@@ -33,6 +33,6 @@
         <service
             android:name=".VoclAudioService"
             android:exported="false"
-            android:foregroundServiceType="microphone|mediaPlayback" />
+            android:foregroundServiceType="microphone" />
     </application>
 </manifest>

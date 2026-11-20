@@ -207,8 +207,7 @@ function renderDrills() {
 }
 
 function loadStreak() {
-  fetch(getBackendUrl() + '/api/sessions')
-    .then(function(r) { return r.ok ? r.json() : []; })
+  voclApiJson('/api/sessions')
     .then(function(list) {
       var days = computeStreakDays(list);
       document.getElementById('streak-pill').textContent = days > 0 ? days + '-day streak' : 'Start streak';
@@ -219,11 +218,7 @@ function loadStreak() {
 }
 
 function initDrills() {
-  fetch(getBackendUrl() + '/api/problems')
-    .then(function(res) {
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      return res.json();
-    })
+  voclApiJson('/api/problems')
     .then(function(data) {
       setOfflineBadge(false);
       allProblems = Array.isArray(data) && data.length ? data : VOCL_FALLBACK_PROBLEMS.slice();
