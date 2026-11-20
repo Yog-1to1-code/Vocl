@@ -8,17 +8,10 @@ from pydantic import ValidationError
 
 from app.config import GEMINI_REASONING_MODEL, MOCK_REASONING_LATENCY_SEC, SYSTEM2_TIMEOUT_SEC, USE_MOCK_AI
 from app.models.schemas import Evaluation, Problem
+from app.prompts import build_reasoning_system_prompt
 from app.services.gemini_client import gemini_client
 
 logger = logging.getLogger(__name__)
-
-_SYSTEM2_PROMPT = """\
-You are a rigorous algorithm and system design evaluator. Given a problem and a \
-candidate's approach summary, return JSON with: time_complexity, space_complexity, \
-is_optimal (true only if it matches or beats the optimal target), issues (concrete flaws), \
-missed_edge_cases (edge cases the candidate did not address), next_socratic_hint (one guiding \
-question, never the full answer), score_delta (0-10). Be precise and never sycophantic.\
-"""
 
 FALLBACK_EVALUATION = Evaluation(
     time_complexity="Unknown",
@@ -71,13 +64,7 @@ MOCK_EVALUATIONS: dict[str, Evaluation] = {
 
 
 def build_evaluation_prompt(problem: Problem, user_approach_summary: str) -> str:
-    constraints = "\n".join(f"- {c}" for c in problem.constraints)
-    return (
-        f"Problem: {problem.statement}\n"
-        f"Constraints:\n{constraints}\n"
-        f"Optimal target: {problem.optimal_complexity}\n"
-        f"Candidate approach: {user_approach_summary}"
-    )
+    return f"Candidate proposed approach for problem '{problem.title}':\n{user_approach_summary}"
 
 
 async def evaluate_candidate_approach(problem: Problem, user_approach_summary: str) -> Evaluation:
@@ -91,7 +78,7 @@ async def evaluate_candidate_approach(problem: Problem, user_approach_summary: s
                 model=GEMINI_REASONING_MODEL,
                 contents=build_evaluation_prompt(problem, user_approach_summary),
                 config=types.GenerateContentConfig(
-                    system_instruction=_SYSTEM2_PROMPT,
+                    system_instruction=build_reasoning_system_prompt(problem),
                     response_mime_type="application/json",
                     response_schema=Evaluation,
                     temperature=0.1,

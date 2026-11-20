@@ -1,4 +1,5 @@
 import os
+import sys
 
 from dotenv import load_dotenv
 
@@ -10,6 +11,7 @@ def _read_bool(name: str, default: str = "false") -> bool:
 
 
 USE_MOCK_AI: bool = _read_bool("USE_MOCK_AI")
+PROMPT_MODE: str = os.environ.get("PROMPT_MODE", "prod").strip().lower()
 
 GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_LIVE_MODEL: str = os.environ.get("GEMINI_LIVE_MODEL", "gemini-2.5-flash-native-audio-preview-09-2025")
@@ -23,3 +25,6 @@ CSV_PATH: str = os.environ.get("CSV_PATH", "data/sessions.csv")
 
 UPSTREAM_SAMPLE_RATE: int = 16000  # Gemini Live requires 16kHz mono PCM upstream
 DOWNSTREAM_SAMPLE_RATE: int = 24000  # Gemini Live emits 24kHz mono PCM
+
+# Alias module so `settings.PROMPT_MODE` or `import app.config as settings` works everywhere
+settings = sys.modules[__name__]

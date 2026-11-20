@@ -16,12 +16,15 @@ from google.genai import types
 from app.config import (
     DOWNSTREAM_SAMPLE_RATE,
     GEMINI_LIVE_MODEL,
+    PROMPT_MODE,
     SESSION_MAX_DURATION_SEC,
     UPSTREAM_SAMPLE_RATE,
     USE_MOCK_AI,
+    settings,
 )
 from app.data.problems import PROBLEMS
 from app.models.schemas import Autopsy, Evaluation, Problem, SessionRow
+from app.prompts import build_live_system_prompt
 from app.services.csv_storage import append_session
 from app.services.gemini_client import gemini_client
 from app.services.reasoning_engine import evaluate_candidate_approach
@@ -58,23 +61,7 @@ _EVALUATE_APPROACH_DECLARATION = types.FunctionDeclaration(
 
 
 def _build_system_instruction(problem: Problem) -> str:
-    return f"""\
-You are a senior technical interviewer conducting a live, voice-only mock interview. \
-The candidate is practicing eyes-free during their commute.
-
-Problem id: {problem.id}
-Problem: {problem.title} ({problem.category}, {problem.difficulty})
-{problem.statement}
-
-Rules:
-1. Keep every spoken reply under 3 sentences.
-2. Only call `evaluate_approach` when the candidate proposes a concrete data structure, \
-algorithm, or architectural component. Never call it for greetings, clarifying questions, or thinking pauses.
-3. Right before calling `evaluate_approach`, say a brief filler like "Got it, let me trace that complexity real quick."
-4. Never evaluate Big-O yourself; always delegate to `evaluate_approach`.
-5. After the result arrives, paraphrase `next_socratic_hint` naturally. Never read JSON aloud.
-6. Never be sycophantic. If the approach is suboptimal, say so warmly but honestly.\
-"""
+    return build_live_system_prompt(problem, settings.PROMPT_MODE)
 
 
 def synthesize_chime_pcm(first_hz: float, second_hz: float, duration_sec: float = 1.0, amplitude: float = 0.22) -> bytes:
@@ -157,7 +144,7 @@ class LiveSessionManager(SessionBridge):
     def _build_live_config(self) -> types.LiveConnectConfig:
         return types.LiveConnectConfig(
             response_modalities=[types.Modality.AUDIO],
-            system_instruction=_build_system_instruction(self.problem),
+            system_instruction=build_live_system_prompt(self.problem, settings.PROMPT_MODE),
             tools=[types.Tool(function_declarations=[_EVALUATE_APPROACH_DECLARATION])],
             input_audio_transcription=types.AudioTranscriptionConfig(),
             output_audio_transcription=types.AudioTranscriptionConfig(),
