@@ -14,8 +14,8 @@ USE_MOCK_AI: bool = _read_bool("USE_MOCK_AI")
 PROMPT_MODE: str = os.environ.get("PROMPT_MODE", "prod").strip().lower()
 
 GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_LIVE_MODEL: str = os.environ.get("GEMINI_LIVE_MODEL", "gemini-2.5-flash-native-audio-preview-09-2025")
-GEMINI_REASONING_MODEL: str = os.environ.get("GEMINI_REASONING_MODEL", "gemini-2.5-flash")
+GEMINI_LIVE_MODEL: str = os.environ.get("GEMINI_LIVE_MODEL", "gemini-3.8-live")
+GEMINI_REASONING_MODEL: str = os.environ.get("GEMINI_REASONING_MODEL", "gemini-3.5-flash-lite")
 
 SESSION_MAX_DURATION_SEC: int = 900
 SYSTEM2_TIMEOUT_SEC: float = float(os.environ.get("SYSTEM2_TIMEOUT_SEC", "8"))

@@ -32,8 +32,8 @@ from app.services.live_manager import (
 
 def test_gemini_models_and_session_cap():
     """Verify configured model names and timeout guardrails."""
-    assert "native-audio" in GEMINI_LIVE_MODEL or "gemini" in GEMINI_LIVE_MODEL
-    assert "gemini" in GEMINI_REASONING_MODEL
+    assert GEMINI_LIVE_MODEL == "gemini-3.8-live"
+    assert GEMINI_REASONING_MODEL == "gemini-3.5-flash-lite"
     assert SESSION_MAX_DURATION_SEC == 900
     assert SYSTEM2_TIMEOUT_SEC > 0
 
