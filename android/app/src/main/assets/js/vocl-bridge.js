@@ -55,8 +55,13 @@ function getQueryParam(name) {
 }
 
 function getBackendUrl() {
-    if (window.VoclNative && typeof window.VoclNative.getBackendUrl === 'function') {
-        return window.VoclNative.getBackendUrl();
+    if (window.VoclNative) {
+        if (typeof window.VoclNative.getBackendBaseUrl === 'function') {
+            return window.VoclNative.getBackendBaseUrl();
+        }
+        if (typeof window.VoclNative.getBackendUrl === 'function') {
+            return window.VoclNative.getBackendUrl();
+        }
     }
     return 'http://10.0.2.2:8080';
 }

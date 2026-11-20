@@ -16,7 +16,13 @@ _STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 app = FastAPI(title="Vocl", description="Audio-first technical interview simulator", version="0.1.0")
 
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(api.router)
 app.include_router(ws.router)

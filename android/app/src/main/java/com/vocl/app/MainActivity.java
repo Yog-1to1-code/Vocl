@@ -68,6 +68,8 @@ public class MainActivity extends AppCompatActivity {
         settings.setDomStorageEnabled(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setAllowFileAccess(true);
+        // Allow file:///android_asset/ screens to fetch() our HTTPS backend on all OEM WebViews
+        settings.setAllowUniversalAccessFromFileURLs(true);
 
         webView.addJavascriptInterface(new VoclBridge(), "VoclNative");
 
@@ -214,6 +216,11 @@ public class MainActivity extends AppCompatActivity {
             Intent intent = new Intent(MainActivity.this, VoclAudioService.class);
             intent.setAction(VoclAudioService.ACTION_STOP_SESSION);
             startService(intent);
+        }
+
+        @JavascriptInterface
+        public String getBackendBaseUrl() {
+            return BackendConfig.BASE_HTTP_URL;
         }
 
         @JavascriptInterface

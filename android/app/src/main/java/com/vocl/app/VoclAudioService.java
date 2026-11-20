@@ -91,7 +91,10 @@ public class VoclAudioService extends Service {
         super.onCreate();
         createNotificationChannel();
         httpClient = new OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)
                 .readTimeout(0, TimeUnit.MILLISECONDS)
+                .writeTimeout(0, TimeUnit.MILLISECONDS)
+                .pingInterval(15, TimeUnit.SECONDS)
                 .build();
         audioEngine = new AudioStreamEngine();
         shutdownExecutor = Executors.newSingleThreadExecutor();
@@ -172,7 +175,8 @@ public class VoclAudioService extends Service {
 
             @Override
             public void onFailure(WebSocket ws, Throwable t, @Nullable Response response) {
-                Log.e(TAG, "WebSocket failure", t);
+                String respInfo = response != null ? (" [HTTP " + response.code() + "]") : "";
+                Log.e(TAG, "WebSocket failure" + respInfo + ": " + t.getClass().getName() + ": " + t.getMessage(), t);
                 if (autopsyLatch != null) autopsyLatch.countDown();
                 broadcastState("error");
                 cleanupSession();
