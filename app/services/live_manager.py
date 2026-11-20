@@ -38,15 +38,18 @@ _DOWNSTREAM_CHUNK_SEC = 0.1
 _DOWNSTREAM_CHUNK_BYTES = int(DOWNSTREAM_SAMPLE_RATE * _DOWNSTREAM_CHUNK_SEC) * 2
 MOCK_TURN_TRIGGER_BYTES = UPSTREAM_SAMPLE_RATE * 2 * 2  # ~2s of 16kHz 16-bit mono
 
-_EVALUATE_APPROACH_DECLARATION = types.FunctionDeclaration(
-    name="evaluate_approach",
-    description=(
+_BEHAVIOR_NON_BLOCKING = getattr(getattr(types, "Behavior", None), "NON_BLOCKING", None)
+_SCHEDULING_INTERRUPT = getattr(getattr(types, "FunctionResponseScheduling", None), "INTERRUPT", None)
+
+_declaration_kwargs = {
+    "name": "evaluate_approach",
+    "description": (
         "Evaluate the candidate's proposed approach against the problem's "
         "constraints and optimal complexity. Call ONLY when the candidate "
         "proposes a concrete data structure, algorithm, or architectural "
         "component. Never call for greetings, clarifications, or pauses."
     ),
-    parameters=types.Schema(
+    "parameters": types.Schema(
         type=types.Type.OBJECT,
         properties={
             "problem_id": types.Schema(type=types.Type.STRING, description="The ID of the problem being discussed."),
@@ -57,7 +60,11 @@ _EVALUATE_APPROACH_DECLARATION = types.FunctionDeclaration(
         },
         required=["problem_id", "user_approach_summary"],
     ),
-)
+}
+if _BEHAVIOR_NON_BLOCKING is not None:
+    _declaration_kwargs["behavior"] = _BEHAVIOR_NON_BLOCKING
+
+_EVALUATE_APPROACH_DECLARATION = types.FunctionDeclaration(**_declaration_kwargs)
 
 
 def _build_system_instruction(problem: Problem) -> str:
@@ -141,6 +148,12 @@ class SessionBridge:
 class LiveSessionManager(SessionBridge):
     """Bridges a client WebSocket to a Gemini Live session with System 2 tool calls."""
 
+    def __init__(self, problem_id: str) -> None:
+        super().__init__(problem_id)
+        self._background_tasks: set[asyncio.Task] = set()
+        self._tool_call_in_flight: bool = False
+        self._last_tool_call_timestamp: float = 0.0
+
     def _build_live_config(self) -> types.LiveConnectConfig:
         return types.LiveConnectConfig(
             response_modalities=[types.Modality.AUDIO],
@@ -167,6 +180,10 @@ class LiveSessionManager(SessionBridge):
                     for task in tasks:
                         task.cancel()
                     await asyncio.gather(*tasks, return_exceptions=True)
+                    for bg_task in list(self._background_tasks):
+                        bg_task.cancel()
+                    if self._background_tasks:
+                        await asyncio.gather(*self._background_tasks, return_exceptions=True)
         except Exception:
             logger.exception("Gemini Live session error")
             await self._send_json(ws, {"type": "error", "message": "Live session unavailable"})
@@ -194,7 +211,7 @@ class LiveSessionManager(SessionBridge):
         while True:
             async for response in session.receive():
                 if response.tool_call:
-                    await self._handle_tool_call(ws, session, response.tool_call)
+                    self._dispatch_tool_call(ws, session, response.tool_call)
                     continue
 
                 content = response.server_content
@@ -217,15 +234,37 @@ class LiveSessionManager(SessionBridge):
                 if content.turn_complete:
                     await self._update_client_status(ws, "listening")
 
-    async def _handle_tool_call(self, ws: WebSocket, session, tool_call: types.LiveServerToolCall) -> None:
-        responses: list[types.FunctionResponse] = []
+    def _dispatch_tool_call(self, ws: WebSocket, session, tool_call: types.LiveServerToolCall) -> None:
         for call in tool_call.function_calls or []:
             if call.name != "evaluate_approach":
                 continue
-            evaluation = await self._record_evaluation(ws, (call.args or {}).get("user_approach_summary", ""))
-            responses.append(types.FunctionResponse(id=call.id, name=call.name, response=evaluation.model_dump()))
-        if responses:
-            await session.send_tool_response(function_responses=responses)
+            now = time.time()
+            if self._tool_call_in_flight or (now - self._last_tool_call_timestamp < 3.0):
+                logger.info("Ignoring duplicate/concurrent evaluate_approach call (in_flight=%s)", self._tool_call_in_flight)
+                continue
+            self._tool_call_in_flight = True
+            self._last_tool_call_timestamp = now
+            task = asyncio.create_task(self._execute_tool_call_async(ws, session, call))
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
+
+    async def _execute_tool_call_async(self, ws: WebSocket, session, call) -> None:
+        try:
+            summary = (call.args or {}).get("user_approach_summary", "")
+            evaluation = await self._record_evaluation(ws, summary)
+            resp_kwargs = {
+                "id": call.id,
+                "name": call.name,
+                "response": evaluation.model_dump(),
+            }
+            if _SCHEDULING_INTERRUPT is not None:
+                resp_kwargs["scheduling"] = _SCHEDULING_INTERRUPT
+            response = types.FunctionResponse(**resp_kwargs)
+            await session.send_tool_response(function_responses=[response])
+        except Exception:
+            logger.exception("Error executing asynchronous evaluate_approach tool call")
+        finally:
+            self._tool_call_in_flight = False
 
 
 class MockLiveSessionManager(SessionBridge):
@@ -234,7 +273,10 @@ class MockLiveSessionManager(SessionBridge):
     def __init__(self, problem_id: str) -> None:
         super().__init__(problem_id)
         self._turn_task: asyncio.Task | None = None
+        self._background_tasks: set[asyncio.Task] = set()
         self._pending_candidate_bytes = 0
+        self._tool_call_in_flight: bool = False
+        self._last_tool_call_timestamp: float = 0.0
 
     async def run(self, ws: WebSocket) -> Autopsy:
         self._turn_task = asyncio.create_task(self._speak(ws, GREETING_CHIME_PCM))
@@ -266,12 +308,25 @@ class MockLiveSessionManager(SessionBridge):
             return
         self._pending_candidate_bytes += byte_count
         if self._pending_candidate_bytes >= MOCK_TURN_TRIGGER_BYTES:
+            now = time.time()
+            if self._tool_call_in_flight or (now - self._last_tool_call_timestamp < 3.0):
+                return
+            self._tool_call_in_flight = True
+            self._last_tool_call_timestamp = now
             self._pending_candidate_bytes = 0
-            self._turn_task = asyncio.create_task(self._run_mock_tool_call_turn(ws))
+            task = asyncio.create_task(self._run_mock_tool_call_turn(ws))
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
 
     async def _run_mock_tool_call_turn(self, ws: WebSocket) -> None:
-        await self._record_evaluation(ws, f"Mock transcript: candidate proposed an approach for {self.problem.title}.")
-        await self._speak(ws, HINT_CHIME_PCM)
+        try:
+            await self._record_evaluation(ws, f"Mock transcript: candidate proposed an approach for {self.problem.title}.")
+            self._turn_task = asyncio.create_task(self._speak(ws, HINT_CHIME_PCM))
+            await self._turn_task
+        except Exception:
+            logger.debug("Mock turn cancelled or interrupted")
+        finally:
+            self._tool_call_in_flight = False
 
     async def _speak(self, ws: WebSocket, pcm: bytes) -> None:
         await self._update_client_status(ws, "speaking")
@@ -294,6 +349,11 @@ class MockLiveSessionManager(SessionBridge):
         if self._turn_task and not self._turn_task.done():
             self._turn_task.cancel()
             await asyncio.gather(self._turn_task, return_exceptions=True)
+        for bg in list(self._background_tasks):
+            if not bg.done():
+                bg.cancel()
+        if self._background_tasks:
+            await asyncio.gather(*self._background_tasks, return_exceptions=True)
 
 
 def create_session_bridge(problem_id: str) -> SessionBridge:

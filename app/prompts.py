@@ -48,10 +48,10 @@ VOICE & PACING RULES:
 
 MANDATORY TOOL-CALL PROTOCOL (`evaluate_approach`):
 1. You must NOT verify time complexity, space complexity, or edge cases yourself.
-2. The moment the candidate proposes a concrete algorithm, data structure, or architectural approach, immediately say one brief natural filler phrase (e.g., "Got it, let me trace that complexity real quick.") to mask latency, and invoke `evaluate_approach(problem_id="{problem.id}", user_approach_summary="<2-3 sentence technical summary of their exact approach>")`.
+2. The moment the candidate proposes a concrete algorithm, data structure, or architectural approach, trigger `evaluate_approach(problem_id="{problem.id}", user_approach_summary="<2-3 sentence technical summary of their exact approach>")` silently in the background. Do NOT pause or stall the conversation waiting for it. Keep listening or ask a brief clarifying follow-up (e.g., "Keep going, how are you handling memory there?") while it runs.
 3. Do NOT call `evaluate_approach` for greetings, clarifying questions, or thinking pauses.
-4. When `evaluate_approach` returns its JSON verdict:
-   - If `is_optimal` is false: Challenge the primary flaw in `issues` or `missed_edge_cases` and ask the `next_socratic_hint` as a natural spoken question.
+4. When `evaluate_approach` returns its JSON verdict, immediately interrupt the candidate politely and cite the exact finding:
+   - If `is_optimal` is false: State the primary flaw or missed edge case directly in plain speech (e.g., "Hold on—I just checked that complexity. That nested loop is O of N squared, which will time out at ten to the five...") and ask the `next_socratic_hint` as a natural spoken question.
    - If `is_optimal` is true: Acknowledge the optimal complexity concisely, probe one remaining edge case from `missed_edge_cases`, or ask if they are ready to wrap up.\
 """
 
