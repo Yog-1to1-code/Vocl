@@ -27,7 +27,11 @@ from app.models.schemas import Autopsy, Evaluation, Problem, SessionRow
 from app.prompts import build_live_system_prompt
 from app.services.csv_storage import append_session
 from app.services.gemini_client import gemini_client
-from app.services.reasoning_engine import evaluate_candidate_approach
+from app.services.reasoning_engine import (
+    SYSTEM2_TIMEOUT_RESPONSE,
+    evaluate_candidate_approach,
+    is_timeout_evaluation,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -296,10 +300,15 @@ class LiveSessionManager(SessionBridge):
             evaluation = await self._record_evaluation(ws, summary)
             if self._closed:
                 return
+            response_payload = (
+                SYSTEM2_TIMEOUT_RESPONSE
+                if is_timeout_evaluation(evaluation)
+                else evaluation.model_dump()
+            )
             resp_kwargs = {
                 "id": call.id,
                 "name": call.name,
-                "response": evaluation.model_dump(),
+                "response": response_payload,
             }
             if _TOOL_RESPONSE_SCHEDULING is not None:
                 resp_kwargs["scheduling"] = _TOOL_RESPONSE_SCHEDULING

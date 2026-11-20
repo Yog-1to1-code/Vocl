@@ -15,10 +15,10 @@ PROMPT_MODE: str = os.environ.get("PROMPT_MODE", "prod").strip().lower()
 
 GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_LIVE_MODEL: str = os.environ.get("GEMINI_LIVE_MODEL", "gemini-3.8-live")
-GEMINI_REASONING_MODEL: str = os.environ.get("GEMINI_REASONING_MODEL", "gemini-3.5-flash-lite")
+GEMINI_REASONING_MODEL: str = os.environ.get("GEMINI_REASONING_MODEL", "gemini-3.1-flash-lite")
 
 SESSION_MAX_DURATION_SEC: int = 900
-SYSTEM2_TIMEOUT_SEC: float = float(os.environ.get("SYSTEM2_TIMEOUT_SEC", "12"))
+SYSTEM2_TIMEOUT_SEC: float = float(os.environ.get("SYSTEM2_TIMEOUT_SEC", "3.0"))
 MOCK_REASONING_LATENCY_SEC: float = 1.5
 
 CSV_PATH: str = os.environ.get("CSV_PATH", "data/sessions.csv")

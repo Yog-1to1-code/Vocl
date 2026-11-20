@@ -33,9 +33,9 @@ from app.services.live_manager import (
 def test_gemini_models_and_session_cap():
     """Verify configured model names and timeout guardrails."""
     assert GEMINI_LIVE_MODEL == "gemini-3.8-live"
-    assert GEMINI_REASONING_MODEL == "gemini-3.5-flash-lite"
+    assert GEMINI_REASONING_MODEL == "gemini-3.1-flash-lite"
     assert SESSION_MAX_DURATION_SEC == 900
-    assert SYSTEM2_TIMEOUT_SEC > 0
+    assert SYSTEM2_TIMEOUT_SEC == 3.0
 
 
 def test_evaluate_approach_declaration_schema():
@@ -270,12 +270,14 @@ def test_upstream_audio_flows_during_system2_analysis(monkeypatch):
 
 
 def test_system2_fallback_on_malformed_json_or_timeout(monkeypatch):
-    """Verify reasoning_engine returns FALLBACK_EVALUATION on malformed JSON or timeout."""
+    """Verify reasoning_engine returns FALLBACK_EVALUATION on malformed JSON and timeout handoff payload on timeout."""
     import app.services.reasoning_engine as reasoning_engine
+    from app.config import settings
 
     async def _test():
         monkeypatch.setattr(reasoning_engine, "USE_MOCK_AI", False)
 
+        # 1. Malformed JSON -> FALLBACK_EVALUATION
         bad_resp = MagicMock()
         bad_resp.text = "{not-valid-json"
         fake_client = MagicMock()
@@ -286,5 +288,29 @@ def test_system2_fallback_on_malformed_json_or_timeout(monkeypatch):
             PROBLEMS["longest-palindrome"], "test approach"
         )
         assert result == reasoning_engine.FALLBACK_EVALUATION
+
+        # 2. Timeout -> TIMEOUT_EVALUATION + self-answer FunctionResponse handoff
+        async def _slow_generate(*_args, **_kwargs):
+            await asyncio.sleep(0.5)
+
+        fake_client.aio.models.generate_content = AsyncMock(side_effect=_slow_generate)
+        monkeypatch.setattr(settings, "SYSTEM2_TIMEOUT_SEC", 0.05)
+
+        manager = LiveSessionManager("longest-palindrome")
+        ws_mock = AsyncMock()
+        session_mock = MagicMock()
+        session_mock.send_tool_response = AsyncMock()
+
+        call = MagicMock()
+        call.id = "call_timeout_1"
+        call.name = "evaluate_approach"
+        call.args = {"user_approach_summary": "Slow approach"}
+
+        await manager._execute_tool_call_async(ws_mock, session_mock, call)
+        session_mock.send_tool_response.assert_awaited_once()
+        sent_responses = session_mock.send_tool_response.call_args.kwargs["function_responses"]
+        assert len(sent_responses) == 1
+        assert sent_responses[0].response == reasoning_engine.SYSTEM2_TIMEOUT_RESPONSE
+        assert sent_responses[0].response["status"] == "timeout"
 
     asyncio.run(_test())

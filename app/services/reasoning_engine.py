@@ -6,22 +6,46 @@ import logging
 from google.genai import types
 from pydantic import ValidationError
 
-from app.config import GEMINI_REASONING_MODEL, MOCK_REASONING_LATENCY_SEC, SYSTEM2_TIMEOUT_SEC, USE_MOCK_AI
+from app.config import MOCK_REASONING_LATENCY_SEC, USE_MOCK_AI, settings
 from app.models.schemas import Evaluation, Problem
 from app.prompts import build_reasoning_system_prompt
 from app.services.gemini_client import gemini_client
 
 logger = logging.getLogger(__name__)
 
+_TIMEOUT_ISSUE = "System 2 evaluation timed out"
+
 FALLBACK_EVALUATION = Evaluation(
     time_complexity="Unknown",
     space_complexity="Unknown",
     is_optimal=False,
-    issues=["System 2 evaluation timed out or failed"],
+    issues=["System 2 evaluation failed"],
     missed_edge_cases=[],
     next_socratic_hint="Let's continue. Walk me through your approach step by step.",
     score_delta=0.0,
 )
+
+TIMEOUT_EVALUATION = Evaluation(
+    time_complexity="Unknown",
+    space_complexity="Unknown",
+    is_optimal=False,
+    issues=[_TIMEOUT_ISSUE],
+    missed_edge_cases=[],
+    next_socratic_hint="Let's continue. Walk me through your approach step by step.",
+    score_delta=0.0,
+)
+
+SYSTEM2_TIMEOUT_RESPONSE: dict[str, str] = {
+    "status": "timeout",
+    "instruction": (
+        "Deep verifier is currently busy. Evaluate the candidate's approach yourself right now—"
+        "identify their Big-O complexity or main flaw and ask one sharp Socratic question immediately."
+    ),
+}
+
+
+def is_timeout_evaluation(evaluation: Evaluation) -> bool:
+    return _TIMEOUT_ISSUE in evaluation.issues
 
 MOCK_EVALUATIONS: dict[str, Evaluation] = {
     "longest-palindrome": Evaluation(
@@ -72,6 +96,7 @@ async def evaluate_candidate_approach(problem: Problem, user_approach_summary: s
         await asyncio.sleep(MOCK_REASONING_LATENCY_SEC)
         return MOCK_EVALUATIONS.get(problem.id, FALLBACK_EVALUATION).model_copy(deep=True)
 
+    model_name = settings.GEMINI_REASONING_MODEL
     config_kwargs: dict = {
         "system_instruction": build_reasoning_system_prompt(problem),
         "response_mime_type": "application/json",
@@ -79,22 +104,26 @@ async def evaluate_candidate_approach(problem: Problem, user_approach_summary: s
         "temperature": 0.1,
         "max_output_tokens": 200,
     }
-    # Use MINIMAL thinking on Gemini 3.x flash-lite (thinking_budget=0 returns 400 on 3.x)
-    if "flash-lite" in GEMINI_REASONING_MODEL and hasattr(types, "ThinkingConfig"):
-        config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_level="MINIMAL")
+    if "flash-lite" in model_name and hasattr(types, "ThinkingConfig"):
+        # Gemini 2.5 uses thinking_budget=0; Gemini 3.x uses thinking_level="MINIMAL"
+        if "2.5" in model_name:
+            config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
+        else:
+            config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_level="MINIMAL")
 
     try:
         response = await asyncio.wait_for(
             gemini_client().aio.models.generate_content(
-                model=GEMINI_REASONING_MODEL,
+                model=model_name,
                 contents=build_evaluation_prompt(problem, user_approach_summary),
                 config=types.GenerateContentConfig(**config_kwargs),
             ),
-            timeout=SYSTEM2_TIMEOUT_SEC,
+            timeout=settings.SYSTEM2_TIMEOUT_SEC,
         )
         return Evaluation.model_validate_json(response.text)
     except asyncio.TimeoutError:
-        logger.warning("System 2 timed out after %.1fs", SYSTEM2_TIMEOUT_SEC)
+        logger.warning("System 2 timed out after %.1fs; handing off to System 1", settings.SYSTEM2_TIMEOUT_SEC)
+        return TIMEOUT_EVALUATION
     except ValidationError:
         logger.exception("System 2 returned JSON that violates the Evaluation schema")
     except Exception:
