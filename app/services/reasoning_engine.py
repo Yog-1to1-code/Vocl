@@ -1,63 +1,96 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 
-from google import genai
+from google.genai import types
+from pydantic import ValidationError
 
-from app.config import GEMINI_API_KEY, GEMINI_REASONING_MODEL, SYSTEM2_TIMEOUT_SEC
+from app.config import GEMINI_REASONING_MODEL, MOCK_REASONING_LATENCY_SEC, SYSTEM2_TIMEOUT_SEC, USE_MOCK_AI
 from app.models.schemas import Evaluation, Problem
+from app.services.gemini_client import gemini_client
 
 logger = logging.getLogger(__name__)
 
-_client = genai.Client(api_key=GEMINI_API_KEY)
-
 _SYSTEM2_PROMPT = """\
-You are a rigorous algorithm and system design evaluator. You receive a problem \
-statement with constraints and a candidate's proposed approach summary.
-
-Evaluate the approach and return a JSON object with exactly these fields:
-- time_complexity: string (Big-O notation)
-- space_complexity: string (Big-O notation)
-- is_optimal: boolean (true only if it matches or beats the optimal complexity)
-- issues: list of strings (concrete flaws, TLE risks, correctness bugs)
-- missed_edge_cases: list of strings (edge cases the candidate didn't address)
-- next_socratic_hint: string (a single guiding question to nudge toward a better approach, \
-  or encouragement if already optimal)
-- score_delta: float 0-10 (how much this approach moves the candidate toward a perfect answer)
-
-Be precise. Never be sycophantic. If the approach is wrong, say so directly.\
+You are a rigorous algorithm and system design evaluator. Given a problem and a \
+candidate's approach summary, return JSON with: time_complexity, space_complexity, \
+is_optimal (true only if it matches or beats the optimal target), issues (concrete flaws), \
+missed_edge_cases (edge cases the candidate did not address), next_socratic_hint (one guiding \
+question, never the full answer), score_delta (0-10). Be precise and never sycophantic.\
 """
 
-_FALLBACK_EVALUATION = Evaluation(
+FALLBACK_EVALUATION = Evaluation(
     time_complexity="Unknown",
     space_complexity="Unknown",
     is_optimal=False,
     issues=["System 2 evaluation timed out or failed"],
     missed_edge_cases=[],
-    next_socratic_hint="Let's continue — walk me through your approach step by step.",
+    next_socratic_hint="Let's continue. Walk me through your approach step by step.",
     score_delta=0.0,
 )
 
+MOCK_EVALUATIONS: dict[str, Evaluation] = {
+    "longest-palindrome": Evaluation(
+        time_complexity="O(N^3)",
+        space_complexity="O(1)",
+        is_optimal=False,
+        issues=[
+            "Enumerating all O(N^2) substrings and re-checking each one costs O(N) per check",
+            "At N = 10^5 this is ~10^15 operations and will time out",
+        ],
+        missed_edge_cases=["Even-length palindromes like 'abba'", "All identical characters"],
+        next_socratic_hint="When you check 'aba' and then 'xabax', what work are you repeating? Could you grow outward from a center instead?",
+        score_delta=4.5,
+    ),
+    "url-shortener": Evaluation(
+        time_complexity="O(1) read / O(1) write",
+        space_complexity="O(N) keys",
+        is_optimal=False,
+        issues=[
+            "Hashing the long URL and truncating to 7 chars invites collisions at 100M URLs/month",
+            "No cache layer in front of the database for a 100:1 read-heavy workload",
+        ],
+        missed_edge_cases=["Hash collision resolution", "Hot-key thundering herd on viral links"],
+        next_socratic_hint="If two long URLs hash to the same 7 characters, what happens? How could you hand out keys without ever colliding?",
+        score_delta=5.5,
+    ),
+    "postgres-cpu-spike": Evaluation(
+        time_complexity="Reactive restart",
+        space_complexity="N/A",
+        is_optimal=False,
+        issues=[
+            "Restarting the primary or scaling vCPUs hides the root cause instead of finding it",
+            "No look at pg_stat_activity or pg_stat_statements before acting",
+        ],
+        missed_edge_cases=["Autovacuum blocked by long-running transactions", "Runaway analytics query without statement_timeout"],
+        next_socratic_hint="Before you touch the instance, which system view would tell you exactly which queries are burning CPU right now?",
+        score_delta=4.0,
+    ),
+}
 
-async def evaluate_candidate_approach(
-    problem: Problem,
-    user_approach_summary: str,
-) -> Evaluation:
-    prompt = (
-        f"## Problem\n{problem.statement}\n\n"
-        f"## Constraints\n" + "\n".join(f"- {c}" for c in problem.constraints) + "\n\n"
-        f"## Optimal Target\n{problem.optimal_complexity}\n\n"
-        f"## Candidate's Approach\n{user_approach_summary}"
+
+def build_evaluation_prompt(problem: Problem, user_approach_summary: str) -> str:
+    constraints = "\n".join(f"- {c}" for c in problem.constraints)
+    return (
+        f"Problem: {problem.statement}\n"
+        f"Constraints:\n{constraints}\n"
+        f"Optimal target: {problem.optimal_complexity}\n"
+        f"Candidate approach: {user_approach_summary}"
     )
+
+
+async def evaluate_candidate_approach(problem: Problem, user_approach_summary: str) -> Evaluation:
+    if USE_MOCK_AI:
+        await asyncio.sleep(MOCK_REASONING_LATENCY_SEC)
+        return MOCK_EVALUATIONS.get(problem.id, FALLBACK_EVALUATION).model_copy(deep=True)
+
     try:
         response = await asyncio.wait_for(
-            asyncio.to_thread(
-                _client.models.generate_content,
+            gemini_client().aio.models.generate_content(
                 model=GEMINI_REASONING_MODEL,
-                contents=prompt,
-                config=genai.types.GenerateContentConfig(
+                contents=build_evaluation_prompt(problem, user_approach_summary),
+                config=types.GenerateContentConfig(
                     system_instruction=_SYSTEM2_PROMPT,
                     response_mime_type="application/json",
                     response_schema=Evaluation,
@@ -66,11 +99,11 @@ async def evaluate_candidate_approach(
             ),
             timeout=SYSTEM2_TIMEOUT_SEC,
         )
-        parsed = json.loads(response.text)
-        return Evaluation(**parsed)
+        return Evaluation.model_validate_json(response.text)
     except asyncio.TimeoutError:
         logger.warning("System 2 timed out after %.1fs", SYSTEM2_TIMEOUT_SEC)
-        return _FALLBACK_EVALUATION
+    except ValidationError:
+        logger.exception("System 2 returned JSON that violates the Evaluation schema")
     except Exception:
         logger.exception("System 2 evaluation failed")
-        return _FALLBACK_EVALUATION
+    return FALLBACK_EVALUATION

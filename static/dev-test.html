@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vocl · Dev Voice &amp; WebSocket Harness</title>
+<style>
+  :root { --bg: #000; --surface: #141416; --border: #242428; --green: #28D763; --blue: #248AF8; --amber: #EBA65A; --red: #F05248; --text: #FFF; --muted: #8E8E93; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif; padding: 24px; max-width: 780px; margin: 0 auto; }
+  .mono { font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  h1 { font-size: 24px; font-weight: 700; margin-bottom: 6px; }
+  p.sub { color: var(--muted); font-size: 14px; margin-bottom: 20px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px; margin-bottom: 16px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  select, button { height: 42px; border-radius: 12px; font-size: 14px; font-weight: 600; padding: 0 16px; border: 1px solid var(--border); background: #1C1C20; color: #FFF; cursor: pointer; }
+  button.primary { background: var(--green); color: #000; border-color: var(--green); }
+  button.warn { border-color: var(--amber); color: var(--amber); }
+  button.danger { border-color: var(--red); color: var(--red); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .stats { display: flex; gap: 18px; margin-top: 14px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+  .badge { padding: 3px 10px; border-radius: 999px; font-weight: 700; font-size: 12px; text-transform: uppercase; background: #222; color: #FFF; }
+  .badge.speaking { background: rgba(36,138,248,0.2); color: #8CB6FF; }
+  .badge.listening { background: rgba(40,215,99,0.2); color: var(--green); }
+  .badge.analyzing { background: rgba(235,166,90,0.2); color: var(--amber); }
+  #log { height: 360px; overflow-y: auto; font-size: 12.5px; line-height: 1.55; background: #09090B; border: 1px solid var(--border); border-radius: 12px; padding: 14px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+  <h1>Vocl · Local Dev Test Harness</h1>
+  <p class="sub">Streams 16 kHz mono PCM upstream, plays 24 kHz mono PCM downstream, and logs every JSON frame.</p>
+
+  <div class="card">
+    <div class="controls">
+      <select id="problem-select">
+        <option value="longest-palindrome">longest-palindrome (DSA)</option>
+        <option value="url-shortener">url-shortener (System Design)</option>
+        <option value="postgres-cpu-spike">postgres-cpu-spike (DevOps)</option>
+      </select>
+      <button class="primary" id="connect-btn" onclick="startHarness()">Connect &amp; Start Mic</button>
+      <button class="warn" id="synth-btn" onclick="sendSyntheticTurn()" disabled>Send 2s Synthetic 16kHz PCM</button>
+      <button class="warn" id="barge-btn" onclick="sendBargeIn()" disabled>Simulate Barge-In</button>
+      <button class="danger" id="stop-btn" onclick="endHarness()" disabled>End &amp; Grade</button>
+    </div>
+    <div class="stats mono">
+      <span>State: <span class="badge" id="state-badge">idle</span></span>
+      <span>Upstream: <strong id="up-bytes">0</strong> B</span>
+      <span>Downstream: <strong id="down-bytes">0</strong> B</span>
+    </div>
+  </div>
+
+  <div id="log" class="mono">Ready. Click "Connect &amp; Start Mic" (or "Send 2s Synthetic 16kHz PCM" once connected).\n</div>
+
+<script>
+let ws = null;
+let audioCtx = null;
+let micStream = null;
+let processor = null;
+let nextPlayTime = 0;
+let upBytes = 0;
+let downBytes = 0;
+
+function log(line) {
+  const el = document.getElementById('log');
+  const ts = new Date().toISOString().slice(11, 23);
+  el.textContent += `[${ts}] ${line}\n`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function setStateBadge(status) {
+  const b = document.getElementById('state-badge');
+  b.textContent = status;
+  b.className = 'badge ' + status;
+}
+
+async function startHarness() {
+  const problemId = document.getElementById('problem-select').value;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+  nextPlayTime = audioCtx.currentTime;
+  upBytes = 0; downBytes = 0;
+
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${proto}//${location.host}/ws/interview/${problemId}`);
+  ws.binaryType = 'arraybuffer';
+
+  ws.onopen = async () => {
+    log(`WS connected -> /ws/interview/${problemId}`);
+    document.getElementById('connect-btn').disabled = true;
+    document.getElementById('synth-btn').disabled = false;
+    document.getElementById('barge-btn').disabled = false;
+    document.getElementById('stop-btn').disabled = false;
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000, channelCount: 1 } });
+      startMicCapture(micStream);
+      log('Mic capture active (16 kHz mono PCM)');
+    } catch (err) {
+      log(`Mic permission skipped (${err.message}) — use "Send 2s Synthetic 16kHz PCM" button.`);
+    }
+  };
+
+  ws.onmessage = (ev) => {
+    if (typeof ev.data === 'string') {
+      log(`JSON <- ${ev.data}`);
+      try {
+        const msg = JSON.parse(ev.data);
+        if (msg.type === 'state') setStateBadge(msg.status);
+        if (msg.type === 'clear_audio_buffer') nextPlayTime = audioCtx.currentTime;
+        if (msg.type === 'autopsy') setStateBadge('complete');
+      } catch {}
+    } else {
+      const buf = ev.data;
+      downBytes += buf.byteLength;
+      document.getElementById('down-bytes').textContent = downBytes;
+      playPcm24k(buf);
+    }
+  };
+
+  ws.onclose = (ev) => {
+    log(`WS closed (code=${ev.code})`);
+    cleanupMic();
+    document.getElementById('connect-btn').disabled = false;
+    document.getElementById('synth-btn').disabled = true;
+    document.getElementById('barge-btn').disabled = true;
+    document.getElementById('stop-btn').disabled = true;
+  };
+}
+
+function startMicCapture(stream) {
+  const capCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+  const src = capCtx.createMediaStreamSource(stream);
+  processor = capCtx.createScriptProcessor(2048, 1, 1);
+  processor.onaudioprocess = (e) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const input = e.inputBuffer.getChannelData(0);
+    const pcm16 = new Int16Array(input.length);
+    for (let i = 0; i < input.length; i++) {
+      const s = Math.max(-1, Math.min(1, input[i]));
+      pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    }
+    ws.send(pcm16.buffer);
+    upBytes += pcm16.byteLength;
+    document.getElementById('up-bytes').textContent = upBytes;
+  };
+  src.connect(processor);
+  processor.connect(capCtx.destination);
+}
+
+function playPcm24k(arrayBuffer) {
+  if (!audioCtx) return;
+  const int16 = new Int16Array(arrayBuffer);
+  const float32 = new Float32Array(int16.length);
+  for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768;
+  const audioBuf = audioCtx.createBuffer(1, float32.length, 24000);
+  audioBuf.getChannelData(0).set(float32);
+  const source = audioCtx.createBufferSource();
+  source.buffer = audioBuf;
+  source.connect(audioCtx.destination);
+  const startAt = Math.max(audioCtx.currentTime, nextPlayTime);
+  source.start(startAt);
+  nextPlayTime = startAt + audioBuf.duration;
+}
+
+function sendSyntheticTurn() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  const chunk = new Uint8Array(3200);
+  for (let i = 0; i < 21; i++) {
+    ws.send(chunk.buffer);
+    upBytes += chunk.byteLength;
+  }
+  document.getElementById('up-bytes').textContent = upBytes;
+  log('Sent 67,200 bytes (~2.1s) of 16 kHz PCM upstream');
+}
+
+function sendBargeIn() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: 'simulate_barge_in' }));
+  log('JSON -> {"type":"simulate_barge_in"}');
+}
+
+function endHarness() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: 'end_session' }));
+  log('JSON -> {"type":"end_session"}');
+}
+
+function cleanupMic() {
+  if (processor) { try { processor.disconnect(); } catch {} processor = null; }
+  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+}
+</script>
+</body>
+</html>

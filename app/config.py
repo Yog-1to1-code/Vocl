@@ -1,16 +1,25 @@
 import os
+
 from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def _read_bool(name: str, default: str = "false") -> bool:
+    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+
+
+USE_MOCK_AI: bool = _read_bool("USE_MOCK_AI")
+
 GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_LIVE_MODEL: str = os.environ.get("GEMINI_LIVE_MODEL", "gemini-2.0-flash-live-001")
+GEMINI_LIVE_MODEL: str = os.environ.get("GEMINI_LIVE_MODEL", "gemini-2.5-flash-native-audio-preview-09-2025")
 GEMINI_REASONING_MODEL: str = os.environ.get("GEMINI_REASONING_MODEL", "gemini-2.5-flash")
 
 SESSION_MAX_DURATION_SEC: int = 900
-SYSTEM2_TIMEOUT_SEC: float = 8.0
+SYSTEM2_TIMEOUT_SEC: float = float(os.environ.get("SYSTEM2_TIMEOUT_SEC", "8"))
+MOCK_REASONING_LATENCY_SEC: float = 1.5
 
 CSV_PATH: str = os.environ.get("CSV_PATH", "data/sessions.csv")
 
-UPSTREAM_SAMPLE_RATE: int = 16000  # 16 kHz mono PCM from client
-DOWNSTREAM_SAMPLE_RATE: int = 24000  # 24 kHz mono PCM to client
+UPSTREAM_SAMPLE_RATE: int = 16000  # Gemini Live requires 16kHz mono PCM upstream
+DOWNSTREAM_SAMPLE_RATE: int = 24000  # Gemini Live emits 24kHz mono PCM

@@ -191,12 +191,14 @@ function initDrills() {
       return res.json();
     })
     .then(function(data) {
+      setOfflineBadge(false);
       allProblems = Array.isArray(data) && data.length ? data : VOCL_FALLBACK_PROBLEMS;
       var featured = allProblems.find(function(p) { return p.id === 'longest-palindrome'; }) || allProblems[0];
       renderFeatured(featured);
       renderDrills();
     })
     .catch(function() {
+      setOfflineBadge(true);
       allProblems = VOCL_FALLBACK_PROBLEMS;
       renderFeatured(allProblems[0]);
       renderDrills();

@@ -3,27 +3,37 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
+import sys
 import time
+from array import array
 from dataclasses import dataclass, field
 from uuid import uuid4
 
-from google import genai
+from fastapi import WebSocket
 from google.genai import types
 
 from app.config import (
-    GEMINI_API_KEY,
+    DOWNSTREAM_SAMPLE_RATE,
     GEMINI_LIVE_MODEL,
     SESSION_MAX_DURATION_SEC,
     UPSTREAM_SAMPLE_RATE,
+    USE_MOCK_AI,
 )
 from app.data.problems import PROBLEMS
 from app.models.schemas import Autopsy, Evaluation, Problem, SessionRow
 from app.services.csv_storage import append_session
+from app.services.gemini_client import gemini_client
 from app.services.reasoning_engine import evaluate_candidate_approach
 
 logger = logging.getLogger(__name__)
 
-_client = genai.Client(api_key=GEMINI_API_KEY)
+_UPSTREAM_MIME = f"audio/pcm;rate={UPSTREAM_SAMPLE_RATE}"
+_FINAL_TRANSCRIPT_CHARS = 1200
+
+_DOWNSTREAM_CHUNK_SEC = 0.1
+_DOWNSTREAM_CHUNK_BYTES = int(DOWNSTREAM_SAMPLE_RATE * _DOWNSTREAM_CHUNK_SEC) * 2
+MOCK_TURN_TRIGGER_BYTES = UPSTREAM_SAMPLE_RATE * 2 * 2  # ~2s of 16kHz 16-bit mono
 
 _EVALUATE_APPROACH_DECLARATION = types.FunctionDeclaration(
     name="evaluate_approach",
@@ -34,18 +44,12 @@ _EVALUATE_APPROACH_DECLARATION = types.FunctionDeclaration(
         "component. Never call for greetings, clarifications, or pauses."
     ),
     parameters=types.Schema(
-        type="OBJECT",
+        type=types.Type.OBJECT,
         properties={
-            "problem_id": types.Schema(
-                type="STRING",
-                description="The ID of the problem being discussed.",
-            ),
+            "problem_id": types.Schema(type=types.Type.STRING, description="The ID of the problem being discussed."),
             "user_approach_summary": types.Schema(
-                type="STRING",
-                description=(
-                    "A concise 2-3 sentence summary of the candidate's "
-                    "proposed approach, data structures, and algorithm."
-                ),
+                type=types.Type.STRING,
+                description="A concise 2-3 sentence summary of the candidate's proposed approach.",
             ),
         },
         required=["problem_id", "user_approach_summary"],
@@ -55,245 +59,79 @@ _EVALUATE_APPROACH_DECLARATION = types.FunctionDeclaration(
 
 def _build_system_instruction(problem: Problem) -> str:
     return f"""\
-You are a senior technical interviewer conducting a live voice interview. \
-The candidate is practicing in an eyes-free, audio-only "pocket mode" \
-during their commute.
+You are a senior technical interviewer conducting a live, voice-only mock interview. \
+The candidate is practicing eyes-free during their commute.
 
-## Current Problem
-**{problem.title}** ({problem.category}, {problem.difficulty})
+Problem id: {problem.id}
+Problem: {problem.title} ({problem.category}, {problem.difficulty})
 {problem.statement}
 
-## Rules
-1. Start by reading the problem statement clearly, then ask if the candidate \
-has any clarifying questions.
-2. Listen actively. Use brief verbal affirmations ("Got it", "Okay") while \
-the candidate is speaking.
-3. When the candidate proposes a concrete approach (data structure, algorithm, \
-or architectural component), say a brief filler like "Let me trace that \
-complexity real quick..." and immediately call `evaluate_approach`.
-4. After receiving the evaluation result, deliver the `next_socratic_hint` \
-naturally in your own voice — never read raw JSON to the candidate.
-5. If `is_optimal` is true, congratulate briefly and probe edge cases.
-6. NEVER evaluate Big-O complexity yourself. ALWAYS delegate to `evaluate_approach`.
-7. NEVER be sycophantic. If the approach is suboptimal, say so with warmth but honesty.
-8. Keep all spoken responses under 3 sentences to maintain conversational pace.
-9. If the candidate goes silent for >10 seconds, gently prompt them.
-10. When the session nears the time limit, guide toward a summary.\
+Rules:
+1. Keep every spoken reply under 3 sentences.
+2. Only call `evaluate_approach` when the candidate proposes a concrete data structure, \
+algorithm, or architectural component. Never call it for greetings, clarifying questions, or thinking pauses.
+3. Right before calling `evaluate_approach`, say a brief filler like "Got it, let me trace that complexity real quick."
+4. Never evaluate Big-O yourself; always delegate to `evaluate_approach`.
+5. After the result arrives, paraphrase `next_socratic_hint` naturally. Never read JSON aloud.
+6. Never be sycophantic. If the approach is suboptimal, say so warmly but honestly.\
 """
 
 
+def synthesize_chime_pcm(first_hz: float, second_hz: float, duration_sec: float = 1.0, amplitude: float = 0.22) -> bytes:
+    note_samples = int(DOWNSTREAM_SAMPLE_RATE * duration_sec / 2)
+    fade_samples = int(DOWNSTREAM_SAMPLE_RATE * 0.02)
+    samples = array("h")
+    for frequency_hz in (first_hz, second_hz):
+        for i in range(note_samples):
+            envelope = min(1.0, i / fade_samples, (note_samples - i) / fade_samples) * math.exp(-3.0 * i / note_samples)
+            samples.append(int(32767 * amplitude * envelope * math.sin(2 * math.pi * frequency_hz * i / DOWNSTREAM_SAMPLE_RATE)))
+    if sys.byteorder == "big":
+        samples.byteswap()  # Wire format is little-endian PCM
+    return samples.tobytes()
+
+
+GREETING_CHIME_PCM = synthesize_chime_pcm(660.0, 880.0)
+HINT_CHIME_PCM = synthesize_chime_pcm(880.0, 587.0)
+
+
 @dataclass
-class LiveSession:
+class LiveSessionState:
     session_id: str = field(default_factory=lambda: uuid4().hex[:12])
     problem_id: str = ""
     start_time: float = field(default_factory=time.time)
     evaluations: list[Evaluation] = field(default_factory=list)
-    is_active: bool = True
+    candidate_transcript: list[str] = field(default_factory=list)
+    client_status: str = ""
 
 
-class LiveSessionManager:
-    """Bridges a client WebSocket to a Gemini Live API session with System 2 tool calls."""
+class SessionBridge:
+    """Shared client-facing contract for real and mock interview sessions."""
 
     def __init__(self, problem_id: str) -> None:
         self.problem = PROBLEMS[problem_id]
-        self.state = LiveSession(problem_id=problem_id)
-        self._gemini_session: types.AsyncSession | None = None
+        self.state = LiveSessionState(problem_id=problem_id)
 
-    async def run(self, ws) -> Autopsy | None:  # noqa: ANN001 — WebSocket type varies
-        config = types.LiveConnectConfig(
-            response_modalities=["AUDIO"],
-            speech_config=types.SpeechConfig(
-                voice_config=types.VoiceConfig(
-                    prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Orus")
-                )
-            ),
-            system_instruction=types.Content(
-                parts=[types.Part(text=_build_system_instruction(self.problem))]
-            ),
-            tools=[types.Tool(function_declarations=[_EVALUATE_APPROACH_DECLARATION])],
-            input_audio_transcription=types.AudioTranscriptionConfig(),
-            output_audio_transcription=types.AudioTranscriptionConfig(),
-        )
+    async def run(self, ws: WebSocket) -> Autopsy:
+        raise NotImplementedError
 
-        try:
-            async with _client.aio.live.connect(
-                model=GEMINI_LIVE_MODEL, config=config
-            ) as session:
-                self._gemini_session = session
+    async def _update_client_status(self, ws: WebSocket, status: str) -> None:
+        if status == self.state.client_status:
+            return
+        self.state.client_status = status
+        await self._send_json(ws, {"type": "state", "status": status})
 
-                upstream_task = asyncio.create_task(
-                    self._upstream_loop(ws, session)
-                )
-                downstream_task = asyncio.create_task(
-                    self._downstream_loop(ws, session)
-                )
-                timeout_task = asyncio.create_task(
-                    self._session_timer(ws, session)
-                )
+    async def _record_evaluation(self, ws: WebSocket, summary: str) -> Evaluation:
+        await self._update_client_status(ws, "analyzing")
+        await self._send_json(ws, {"type": "tool_call", "name": "evaluate_approach", "summary": summary})
+        evaluation = await evaluate_candidate_approach(self.problem, summary)
+        self.state.evaluations.append(evaluation)
+        await self._send_json(ws, {"type": "tool_result", **evaluation.model_dump()})
+        return evaluation
 
-                done, pending = await asyncio.wait(
-                    [upstream_task, downstream_task, timeout_task],
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
-                for task in pending:
-                    task.cancel()
-                    try:
-                        await task
-                    except asyncio.CancelledError:
-                        pass
-
-                for task in done:
-                    if task.exception() and not isinstance(
-                        task.exception(), asyncio.CancelledError
-                    ):
-                        logger.error(
-                            "Task failed: %s", task.exception(), exc_info=True
-                        )
-
-        except Exception:
-            logger.exception("Gemini Live session error")
-        finally:
-            self.state.is_active = False
-            self._gemini_session = None
-
-        return await self._build_autopsy(ws)
-
-    async def _upstream_loop(self, ws, session: types.AsyncSession) -> None:
-        try:
-            async for message in ws.iter_data():
-                if not self.state.is_active:
-                    break
-
-                if isinstance(message, bytes):
-                    await session.send(
-                        input=types.LiveClientRealtimeInput(
-                            media_chunks=[
-                                types.Blob(
-                                    data=message,
-                                    mime_type=f"audio/pcm;rate={UPSTREAM_SAMPLE_RATE}",
-                                )
-                            ]
-                        )
-                    )
-                elif isinstance(message, str):
-                    try:
-                        control = json.loads(message)
-                        if control.get("type") == "end_session":
-                            self.state.is_active = False
-                            return
-                    except json.JSONDecodeError:
-                        logger.warning("Ignoring malformed client control frame")
-        except Exception:
-            logger.info("Upstream loop ended (client disconnect)")
-
-    async def _downstream_loop(self, ws, session: types.AsyncSession) -> None:
-        try:
-            async for response in session.receive():
-                if not self.state.is_active:
-                    break
-
-                server_content = response.server_content
-                tool_call = response.tool_call
-
-                if server_content:
-                    if server_content.interrupted:
-                        await _send_json(ws, {"type": "clear_audio_buffer"})
-                        await _send_json(
-                            ws, {"type": "state", "status": "listening"}
-                        )
-                        continue
-
-                    if server_content.model_turn and server_content.model_turn.parts:
-                        for part in server_content.model_turn.parts:
-                            if part.inline_data and part.inline_data.data:
-                                await _send_json(
-                                    ws, {"type": "state", "status": "speaking"}
-                                )
-                                await ws.send_bytes(part.inline_data.data)
-
-                    if server_content.turn_complete:
-                        await _send_json(
-                            ws, {"type": "state", "status": "listening"}
-                        )
-
-                elif tool_call:
-                    await self._handle_tool_call(ws, session, tool_call)
-
-        except Exception:
-            logger.info("Downstream loop ended")
-
-    async def _handle_tool_call(
-        self,
-        ws,
-        session: types.AsyncSession,
-        tool_call: types.LiveServerToolCall,
-    ) -> None:
-        for fc in tool_call.function_calls:
-            if fc.name != "evaluate_approach":
-                continue
-
-            await _send_json(ws, {"type": "state", "status": "analyzing"})
-
-            args = fc.args or {}
-            problem_id = args.get("problem_id", self.problem.id)
-            summary = args.get("user_approach_summary", "")
-
-            problem = PROBLEMS.get(problem_id, self.problem)
-            evaluation = await evaluate_candidate_approach(problem, summary)
-            self.state.evaluations.append(evaluation)
-
-            await session.send(
-                input=types.LiveClientToolResponse(
-                    function_responses=[
-                        types.FunctionResponse(
-                            name="evaluate_approach",
-                            id=fc.id,
-                            response=evaluation.model_dump(),
-                        )
-                    ]
-                )
-            )
-
-    async def _session_timer(self, ws, session: types.AsyncSession) -> None:
-        await asyncio.sleep(SESSION_MAX_DURATION_SEC)
-        logger.info("Session %s hit %ds hard cap", self.state.session_id, SESSION_MAX_DURATION_SEC)
-        self.state.is_active = False
-
-    async def _build_autopsy(self, ws) -> Autopsy | None:
-        duration = int(time.time() - self.state.start_time)
-        evals = self.state.evaluations
-
-        if evals:
-            last = evals[-1]
-            final_complexity = f"T:{last.time_complexity} S:{last.space_complexity}"
-            is_optimal = last.is_optimal
-            score = min(10.0, sum(e.score_delta for e in evals))
-            all_missed: list[str] = []
-            for e in evals:
-                all_missed.extend(e.missed_edge_cases)
-            missed = list(dict.fromkeys(all_missed))  # dedupe, preserve order
-            feedback = evals[-1].next_socratic_hint
-        else:
-            final_complexity = "Not evaluated"
-            is_optimal = False
-            score = 0.0
-            missed = []
-            feedback = "Session ended before any approach was evaluated."
-
-        autopsy = Autopsy(
-            session_id=self.state.session_id,
-            problem_id=self.state.problem_id,
-            duration_sec=duration,
-            final_complexity=final_complexity,
-            is_optimal=is_optimal,
-            score=score,
-            missed_edge_cases=missed,
-            summary_feedback=feedback,
-        )
-
-        row = SessionRow(
+    async def _persist_and_send_autopsy(self, ws: WebSocket, evaluations: list[Evaluation]) -> Autopsy:
+        autopsy = summarize_evaluations(self.state, evaluations)
+        await append_session(SessionRow(
             session_id=autopsy.session_id,
-            timestamp_utc="",  # will be set by default_factory
             problem_id=autopsy.problem_id,
             duration_sec=autopsy.duration_sec,
             final_complexity=autopsy.final_complexity,
@@ -301,17 +139,204 @@ class LiveSessionManager:
             score=autopsy.score,
             missed_edge_cases="; ".join(autopsy.missed_edge_cases),
             summary_feedback=autopsy.summary_feedback,
-        )
-        row.timestamp_utc = SessionRow().timestamp_utc  # fresh timestamp
-        await append_session(row)
-
-        try:
-            await _send_json(ws, {"type": "autopsy", **autopsy.model_dump()})
-        except Exception:
-            logger.warning("Could not send autopsy to client (already disconnected)")
-
+        ))
+        await self._send_json(ws, {"type": "autopsy", **autopsy.model_dump()})
         return autopsy
 
+    @staticmethod
+    async def _send_json(ws: WebSocket, payload: dict) -> None:
+        try:
+            await ws.send_text(json.dumps(payload))
+        except Exception:
+            logger.debug("Client socket closed; dropped %s frame", payload.get("type"))
 
-async def _send_json(ws, payload: dict) -> None:
-    await ws.send_text(json.dumps(payload))
+
+class LiveSessionManager(SessionBridge):
+    """Bridges a client WebSocket to a Gemini Live session with System 2 tool calls."""
+
+    def _build_live_config(self) -> types.LiveConnectConfig:
+        return types.LiveConnectConfig(
+            response_modalities=[types.Modality.AUDIO],
+            system_instruction=_build_system_instruction(self.problem),
+            tools=[types.Tool(function_declarations=[_EVALUATE_APPROACH_DECLARATION])],
+            input_audio_transcription=types.AudioTranscriptionConfig(),
+            output_audio_transcription=types.AudioTranscriptionConfig(),
+        )
+
+    async def run(self, ws: WebSocket) -> Autopsy:
+        try:
+            async with gemini_client().aio.live.connect(model=GEMINI_LIVE_MODEL, config=self._build_live_config()) as session:
+                tasks = [
+                    asyncio.create_task(self._relay_client_to_gemini(ws, session)),
+                    asyncio.create_task(self._relay_gemini_to_client(ws, session)),
+                    asyncio.create_task(asyncio.sleep(SESSION_MAX_DURATION_SEC)),
+                ]
+                try:
+                    done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                    for task in done:
+                        if not task.cancelled() and task.exception():
+                            logger.error("Session task failed", exc_info=task.exception())
+                finally:
+                    for task in tasks:
+                        task.cancel()
+                    await asyncio.gather(*tasks, return_exceptions=True)
+        except Exception:
+            logger.exception("Gemini Live session error")
+            await self._send_json(ws, {"type": "error", "message": "Live session unavailable"})
+
+        evaluations = self.state.evaluations
+        if not evaluations and self.state.candidate_transcript:
+            # No tool call fired, so grade the raw transcript once
+            transcript = "".join(self.state.candidate_transcript)[-_FINAL_TRANSCRIPT_CHARS:]
+            evaluations = [await evaluate_candidate_approach(self.problem, f"Candidate said: {transcript}")]
+        return await self._persist_and_send_autopsy(ws, evaluations)
+
+    async def _relay_client_to_gemini(self, ws: WebSocket, session) -> None:
+        while True:
+            message = await ws.receive()
+            if message["type"] == "websocket.disconnect":
+                return
+            if message.get("bytes"):
+                await session.send_realtime_input(audio=types.Blob(data=message["bytes"], mime_type=_UPSTREAM_MIME))
+            elif message.get("text") and _parse_control_type(message["text"]) == "end_session":
+                return
+
+    async def _relay_gemini_to_client(self, ws: WebSocket, session) -> None:
+        await self._update_client_status(ws, "listening")
+        # session.receive() ends after each model turn, so re-enter it per turn
+        while True:
+            async for response in session.receive():
+                if response.tool_call:
+                    await self._handle_tool_call(ws, session, response.tool_call)
+                    continue
+
+                content = response.server_content
+                if not content:
+                    continue
+
+                if content.interrupted:
+                    await self._send_json(ws, {"type": "clear_audio_buffer"})
+                    await self._update_client_status(ws, "listening")
+
+                if content.input_transcription and content.input_transcription.text:
+                    self.state.candidate_transcript.append(content.input_transcription.text)
+
+                if content.model_turn and content.model_turn.parts:
+                    for part in content.model_turn.parts:
+                        if part.inline_data and part.inline_data.data:
+                            await self._update_client_status(ws, "speaking")
+                            await ws.send_bytes(part.inline_data.data)
+
+                if content.turn_complete:
+                    await self._update_client_status(ws, "listening")
+
+    async def _handle_tool_call(self, ws: WebSocket, session, tool_call: types.LiveServerToolCall) -> None:
+        responses: list[types.FunctionResponse] = []
+        for call in tool_call.function_calls or []:
+            if call.name != "evaluate_approach":
+                continue
+            evaluation = await self._record_evaluation(ws, (call.args or {}).get("user_approach_summary", ""))
+            responses.append(types.FunctionResponse(id=call.id, name=call.name, response=evaluation.model_dump()))
+        if responses:
+            await session.send_tool_response(function_responses=responses)
+
+
+class MockLiveSessionManager(SessionBridge):
+    """Offline stand-in for Gemini Live that honours the exact same WebSocket contract."""
+
+    def __init__(self, problem_id: str) -> None:
+        super().__init__(problem_id)
+        self._turn_task: asyncio.Task | None = None
+        self._pending_candidate_bytes = 0
+
+    async def run(self, ws: WebSocket) -> Autopsy:
+        self._turn_task = asyncio.create_task(self._speak(ws, GREETING_CHIME_PCM))
+        try:
+            await asyncio.wait_for(self._relay_client_frames(ws), timeout=SESSION_MAX_DURATION_SEC)
+        except asyncio.TimeoutError:
+            logger.info("Mock session %s hit the %ds cap", self.state.session_id, SESSION_MAX_DURATION_SEC)
+        finally:
+            await self._cancel_active_turn()
+        return await self._persist_and_send_autopsy(ws, self.state.evaluations)
+
+    async def _relay_client_frames(self, ws: WebSocket) -> None:
+        while True:
+            message = await ws.receive()
+            if message["type"] == "websocket.disconnect":
+                return
+            if message.get("bytes"):
+                self._accumulate_candidate_audio(ws, len(message["bytes"]))
+                continue
+            control_type = _parse_control_type(message.get("text") or "")
+            if control_type == "end_session":
+                return
+            if control_type == "simulate_barge_in":
+                await self._simulate_barge_in(ws)
+
+    def _accumulate_candidate_audio(self, ws: WebSocket, byte_count: int) -> None:
+        # Only count speech while idle, mirroring a real turn boundary
+        if self.state.client_status != "listening":
+            return
+        self._pending_candidate_bytes += byte_count
+        if self._pending_candidate_bytes >= MOCK_TURN_TRIGGER_BYTES:
+            self._pending_candidate_bytes = 0
+            self._turn_task = asyncio.create_task(self._run_mock_tool_call_turn(ws))
+
+    async def _run_mock_tool_call_turn(self, ws: WebSocket) -> None:
+        await self._record_evaluation(ws, f"Mock transcript: candidate proposed an approach for {self.problem.title}.")
+        await self._speak(ws, HINT_CHIME_PCM)
+
+    async def _speak(self, ws: WebSocket, pcm: bytes) -> None:
+        await self._update_client_status(ws, "speaking")
+        try:
+            for offset in range(0, len(pcm), _DOWNSTREAM_CHUNK_BYTES):
+                await ws.send_bytes(pcm[offset:offset + _DOWNSTREAM_CHUNK_BYTES])
+                await asyncio.sleep(_DOWNSTREAM_CHUNK_SEC)  # Real-time pacing keeps AudioTrack's non-blocking buffer from dropping audio
+        except Exception:
+            logger.debug("Client socket closed mid-utterance")
+            return
+        await self._update_client_status(ws, "listening")
+
+    async def _simulate_barge_in(self, ws: WebSocket) -> None:
+        if self.state.client_status == "speaking":
+            await self._cancel_active_turn()
+        await self._send_json(ws, {"type": "clear_audio_buffer"})
+        await self._update_client_status(ws, "listening")
+
+    async def _cancel_active_turn(self) -> None:
+        if self._turn_task and not self._turn_task.done():
+            self._turn_task.cancel()
+            await asyncio.gather(self._turn_task, return_exceptions=True)
+
+
+def create_session_bridge(problem_id: str) -> SessionBridge:
+    return MockLiveSessionManager(problem_id) if USE_MOCK_AI else LiveSessionManager(problem_id)
+
+
+def summarize_evaluations(state: LiveSessionState, evaluations: list[Evaluation]) -> Autopsy:
+    duration = int(time.time() - state.start_time)
+    if not evaluations:
+        return Autopsy(
+            session_id=state.session_id, problem_id=state.problem_id, duration_sec=duration,
+            final_complexity="Not evaluated", is_optimal=False, score=0.0, missed_edge_cases=[],
+            summary_feedback="Session ended before any approach was proposed.",
+        )
+    latest = evaluations[-1]
+    return Autopsy(
+        session_id=state.session_id,
+        problem_id=state.problem_id,
+        duration_sec=duration,
+        final_complexity=f"{latest.time_complexity} / {latest.space_complexity}",
+        is_optimal=latest.is_optimal,
+        score=round(min(10.0, max(e.score_delta for e in evaluations)), 1),
+        missed_edge_cases=list(dict.fromkeys(case for e in evaluations for case in e.missed_edge_cases)),
+        summary_feedback=latest.next_socratic_hint,
+    )
+
+
+def _parse_control_type(text: str) -> str:
+    try:
+        return str(json.loads(text).get("type", ""))
+    except (json.JSONDecodeError, AttributeError):
+        logger.warning("Ignoring malformed client control frame")
+        return ""

@@ -1,41 +1,126 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>Vocl · Profile</title>
-<style>
-  :root {
-    --bg: #000000;
-    --surface: #141416;
-    --surface-border: #242428;
-    --green: #28D763;
-    --amber: #EBA65A;
-    --text: #FFFFFF;
-    --muted: #8E8E93;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; }
-  html, body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif; min-height: 100vh; }
-  .mono { font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace; }
+  <meta charset="utf-8">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Vocl · Profile</title>
+  <style>
+    :root {
+      --bg: #000000;
+      --surface: #141416;
+      --surface-border: #242428;
+      --green: #28D763;
+      --amber: #EBA65A;
+      --text: #FFFFFF;
+      --muted: #8E8E93;
+    }
 
   .page { max-width: 520px; margin: 0 auto; padding: 22px 20px 96px; display: flex; flex-direction: column; gap: 20px; }
   .top-row { display: flex; flex-direction: column; padding-top: 4px; }
   .page-title { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; }
   .page-sub { font-size: 15px; color: var(--muted); margin-top: 6px; }
 
-  .card {
-    background: var(--surface); border: 1px solid var(--surface-border); border-radius: 20px;
-    padding: 20px; display: flex; flex-direction: column; gap: 14px;
-  }
-  .card-label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
-  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .row-title { font-size: 15px; font-weight: 600; color: #FFFFFF; }
-  .row-val { font-size: 13px; color: var(--muted); }
-  .row-val.green { color: var(--green); font-weight: 600; }
-  .divider { height: 1px; background: var(--surface-border); }
-</style>
-<script src="js/vocl-bridge.js"></script>
+    html,
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
+      min-height: 100vh;
+    }
+
+    .mono {
+      font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+    }
+
+    .page {
+      max-width: 520px;
+      margin: 0 auto;
+      padding: 22px 20px 96px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .top-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      padding-top: 4px;
+    }
+
+    .page-title {
+      font-size: 30px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+
+    .page-sub {
+      font-size: 15px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    .streak-pill {
+      padding: 7px 14px;
+      border-radius: 9999px;
+      background: rgba(235, 166, 90, 0.08);
+      border: 1px solid rgba(235, 166, 90, 0.45);
+      color: var(--amber);
+      font-size: 12.5px;
+      font-weight: 600;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 20px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .card-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .row-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #FFFFFF;
+    }
+
+    .row-val {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .row-val.green {
+      color: var(--green);
+      font-weight: 600;
+    }
+
+    .divider {
+      height: 1px;
+      background: var(--surface-border);
+    }
+  </style>
+  <script src="js/vocl-bridge.js"></script>
 </head>
+
 <body>
 
 <main class="page">
@@ -44,35 +129,36 @@
     <p class="page-sub">Pocket mode ready.</p>
   </header>
 
-  <section class="card">
-    <span class="card-label mono">AUDIO ENGINE</span>
-    <div class="row">
-      <span class="row-title">Screen-off streaming</span>
-      <span class="row-val green mono">ENABLED</span>
-    </div>
-    <div class="divider"></div>
-    <div class="row">
-      <span class="row-title">Audio format</span>
-      <span class="row-val mono">16 kHz / 24 kHz PCM</span>
-    </div>
-    <div class="divider"></div>
-    <div class="row">
-      <span class="row-title">Backend endpoint</span>
-      <span class="row-val mono" id="backend-url">—</span>
-    </div>
-  </section>
+    <section class="card">
+      <span class="card-label mono">AUDIO ENGINE</span>
+      <div class="row">
+        <span class="row-title">Screen-off streaming</span>
+        <span class="row-val green mono">ENABLED</span>
+      </div>
+      <div class="divider"></div>
+      <div class="row">
+        <span class="row-title">Audio format</span>
+        <span class="row-val mono">16 kHz / 24 kHz PCM</span>
+      </div>
+      <div class="divider"></div>
+      <div class="row">
+        <span class="row-title">Backend endpoint</span>
+        <span class="row-val mono" id="backend-url">—</span>
+      </div>
+    </section>
 
-  <section class="card">
-    <span class="card-label mono">COMING SOON</span>
-    <p style="font-size:14.5px;line-height:1.5;color:#B4B4BC;">
-      Longitudinal weakness tracking, custom interview rubrics, and voice persona selection will live here.
-    </p>
-  </section>
-</main>
+    <section class="card">
+      <span class="card-label mono">COMING SOON</span>
+      <p style="font-size:14.5px;line-height:1.5;color:#B4B4BC;">
+        Longitudinal weakness tracking, custom interview rubrics, and voice persona selection will live here.
+      </p>
+    </section>
+  </main>
 
-<script>renderBottomNav('profile');</script>
-<script>
-  document.getElementById('backend-url').textContent = getBackendUrl();
-</script>
+  <script>renderBottomNav('profile');</script>
+  <script>
+    document.getElementById('backend-url').textContent = getBackendUrl();
+  </script>
 </body>
+
 </html>

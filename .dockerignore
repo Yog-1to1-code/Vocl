@@ -1,0 +1,10 @@
+.env
+.venv/
+.git/
+android/
+Designs/
+designs/
+tests/
+data/sessions.csv
+__pycache__/
+.pytest_cache/

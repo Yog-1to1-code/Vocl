@@ -197,8 +197,12 @@ function loadProblem() {
       if (!res.ok) throw new Error('HTTP ' + res.status);
       return res.json();
     })
-    .then(renderProblem)
+    .then(function(p) {
+      setOfflineBadge(false);
+      renderProblem(p);
+    })
     .catch(function() {
+      setOfflineBadge(true);
       renderProblem(getFallbackProblemById(problemId));
     });
 }

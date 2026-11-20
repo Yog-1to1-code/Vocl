@@ -17,6 +17,8 @@ captures/
 output.json
 __pycache__/
 *.pyc
+.venv/
+.pytest_cache/
 .env
 data/sessions.csv
 .DS_Store

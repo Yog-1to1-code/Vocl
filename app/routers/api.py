@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.config import USE_MOCK_AI
 from app.data.problems import PROBLEMS
 from app.models.schemas import Problem
 from app.services.csv_storage import read_sessions
@@ -9,7 +10,7 @@ router = APIRouter(prefix="/api", tags=["api"])
 
 @router.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "ai_mode": "mock" if USE_MOCK_AI else "live"}
 
 
 @router.get("/problems")

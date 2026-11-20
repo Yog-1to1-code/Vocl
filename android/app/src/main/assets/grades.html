@@ -313,10 +313,12 @@ function initGrades() {
       return res.json();
     })
     .then(function(data) {
+      setOfflineBadge(false);
       var list = Array.isArray(data) && data.length ? data : loadLocalSessions();
       renderGrades(list);
     })
     .catch(function() {
+      setOfflineBadge(true);
       renderGrades(loadLocalSessions());
     });
 }

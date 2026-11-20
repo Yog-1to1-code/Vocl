@@ -95,6 +95,20 @@ function saveSessionLocally(autopsy) {
     }
 }
 
+function setOfflineBadge(isOffline) {
+    var existing = document.getElementById('vocl-offline-badge');
+    if (!isOffline) {
+        if (existing) existing.remove();
+        return;
+    }
+    if (existing) return;
+    var badge = document.createElement('div');
+    badge.id = 'vocl-offline-badge';
+    badge.textContent = 'OFFLINE FALLBACK';
+    badge.style.cssText = 'position:fixed;top:10px;right:12px;z-index:99;padding:3px 8px;border-radius:999px;background:rgba(240,82,72,0.16);border:1px solid rgba(240,82,72,0.45);color:#F05248;font-size:10px;font-weight:700;letter-spacing:0.06em;pointer-events:none;';
+    document.body.appendChild(badge);
+}
+
 function renderBottomNav(activeTab) {
     var tabs = [
         {

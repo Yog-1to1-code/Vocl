@@ -23,7 +23,7 @@ _CSV_HEADERS = [
 _lock = asyncio.Lock()
 
 
-def _ensure_csv_exists() -> None:
+def ensure_csv_exists() -> None:
     path = Path(CSV_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists() or path.stat().st_size == 0:
@@ -34,7 +34,7 @@ def _ensure_csv_exists() -> None:
 
 async def append_session(row: SessionRow) -> None:
     async with _lock:
-        _ensure_csv_exists()
+        ensure_csv_exists()
         with open(CSV_PATH, "a", newline="") as f:
             writer = csv.writer(f)
             writer.writerow([
@@ -52,7 +52,7 @@ async def append_session(row: SessionRow) -> None:
 
 async def read_sessions() -> list[dict[str, str]]:
     async with _lock:
-        _ensure_csv_exists()
+        ensure_csv_exists()
         with open(CSV_PATH, "r", newline="") as f:
             reader = csv.DictReader(f)
             return list(reader)
