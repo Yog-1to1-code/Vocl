@@ -33,7 +33,7 @@ async def dev_test_page() -> FileResponse:
     return FileResponse(_STATIC_DIR / "dev-test.html")
 
 
-@app.get("/downloads/vocl-release.apk", include_in_schema=False)
+@app.api_route("/downloads/vocl-release.apk", methods=["GET", "HEAD"], include_in_schema=False)
 async def download_release_apk() -> FileResponse:
     # Explicit Android MIME type prevents mobile browsers from appending .zip
     return FileResponse(
