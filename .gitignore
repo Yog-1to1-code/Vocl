@@ -23,3 +23,4 @@ __pycache__/
 data/sessions.csv
 .DS_Store
 tests/fixtures/last_ai_response.wav
+tests/fixtures/live_interruption_mix.wav
