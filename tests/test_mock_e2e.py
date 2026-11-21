@@ -67,8 +67,8 @@ def test_health_and_problems_catalog() -> None:
         problems = client.get("/api/problems")
         assert problems.status_code == 200
         items = problems.json()
-        assert len(items) == 3
-        assert {p["id"] for p in items} == {"url-shortener", "longest-palindrome", "postgres-cpu-spike"}
+        assert len(items) == 30
+        assert {"url-shortener", "longest-palindrome", "postgres-cpu-spike"}.issubset({p["id"] for p in items})
 
         dev_page = client.get("/dev-test")
         assert dev_page.status_code == 200

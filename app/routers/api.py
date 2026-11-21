@@ -11,10 +11,12 @@ from app.db.repository import (
     get_user_metrics_summary,
     get_user_session,
     list_problems as db_list_problems,
+    list_user_session_records,
     list_user_sessions,
 )
 from app.models.schemas import Problem
-from app.services.auth import get_current_user
+from app.services.auth import get_current_user, get_optional_current_user
+from app.services.recommender import build_commute_recommendations
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -25,8 +27,17 @@ async def health() -> dict[str, str]:
 
 
 @router.get("/problems")
-async def list_problems() -> list[Problem]:
-    return await db_list_problems()
+async def list_problems(
+    current_user: UserRecord | None = Depends(get_optional_current_user),
+) -> list[Problem]:
+    return await db_list_problems(user_id=current_user.id if current_user else None)
+
+
+@router.get("/recommendations")
+async def get_recommendations(current_user: UserRecord = Depends(get_current_user)) -> dict:
+    problems = await db_list_problems()
+    sessions = await list_user_session_records(current_user.id)
+    return build_commute_recommendations(problems, sessions)
 
 
 @router.get("/problems/{problem_id}")

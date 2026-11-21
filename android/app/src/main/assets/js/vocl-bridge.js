@@ -131,6 +131,34 @@ function voclApiJson(path, method, payload) {
     });
 }
 
+function voclFetchAudioSrc(path) {
+    if (window.VoclNative && typeof window.VoclNative.fetchAudioBase64 === 'function') {
+        return new Promise(function(resolve, reject) {
+            setTimeout(function() {
+                try {
+                    var dataUri = window.VoclNative.fetchAudioBase64(path);
+                    if (!dataUri) {
+                        reject(new Error('Audio unavailable'));
+                        return;
+                    }
+                    resolve(dataUri);
+                } catch (err) {
+                    reject(err);
+                }
+            }, 0);
+        });
+    }
+    var headers = {};
+    var token = getAuthToken();
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    return fetch(getBackendUrl() + path, { headers: headers }).then(function(res) {
+        if (!res.ok) throw new Error('Audio HTTP ' + res.status);
+        return res.blob();
+    }).then(function(blob) {
+        return URL.createObjectURL(blob);
+    });
+}
+
 function voclSupabaseAuthPost(supabaseUrl, apiKey, endpoint, payload) {
     var fullUrl = supabaseUrl.replace(/\/$/, '') + endpoint;
     var jsonBody = JSON.stringify(payload || {});

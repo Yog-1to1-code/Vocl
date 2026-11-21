@@ -91,10 +91,23 @@ def build_evaluation_prompt(problem: Problem, user_approach_summary: str) -> str
     return f"Candidate proposed approach for problem '{problem.title}':\n{user_approach_summary}"
 
 
+def _build_dynamic_mock_evaluation(problem: Problem) -> Evaluation:
+    return Evaluation(
+        time_complexity="Suboptimal baseline",
+        space_complexity="O(N)",
+        is_optimal=False,
+        issues=[f"Initial approach does not yet achieve target bound: {problem.optimal_complexity}"],
+        missed_edge_cases=list(problem.key_edge_cases[:2]) or ["Boundary input handling"],
+        next_socratic_hint=f"How could you tighten your approach for {problem.title} toward {problem.optimal_complexity}?",
+        score_delta=5.0,
+    )
+
+
 async def evaluate_candidate_approach(problem: Problem, user_approach_summary: str) -> Evaluation:
     if USE_MOCK_AI:
         await asyncio.sleep(MOCK_REASONING_LATENCY_SEC)
-        return MOCK_EVALUATIONS.get(problem.id, FALLBACK_EVALUATION).model_copy(deep=True)
+        preset = MOCK_EVALUATIONS.get(problem.id)
+        return (preset or _build_dynamic_mock_evaluation(problem)).model_copy(deep=True)
 
     model_name = settings.GEMINI_REASONING_MODEL
     config_kwargs: dict = {

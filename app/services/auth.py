@@ -110,6 +110,13 @@ async def get_current_user(authorization: str | None = Header(default=None)) -> 
     return user
 
 
+async def get_optional_current_user(authorization: str | None = Header(default=None)) -> UserRecord | None:
+    token = extract_bearer_token(authorization)
+    if not token:
+        return None
+    return await resolve_user_from_token(token)
+
+
 async def authenticate_websocket_user(websocket: WebSocket) -> UserRecord | None:
     """Authenticate a WebSocket client via Authorization header or ?token=<jwt> query param."""
     token = extract_bearer_token(websocket.headers.get("authorization")) or websocket.query_params.get("token")

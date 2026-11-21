@@ -28,32 +28,95 @@ def _to_problem_schema(row: ProblemRecord) -> Problem:
 
 
 async def seed_problems_if_empty() -> None:
-    """Populate the problems table from the built-in catalog when empty."""
+    """Upsert all built-in commute track problems idempotently into the database."""
     factory = get_session_factory()
     async with factory() as db:
-        count = await db.scalar(select(func.count()).select_from(ProblemRecord))
-        if count and count > 0:
-            return
+        existing_rows = {
+            row.id: row
+            for row in (await db.scalars(select(ProblemRecord))).all()
+        }
         for prob in PROBLEMS.values():
-            db.add(ProblemRecord(
-                id=prob.id,
-                title=prob.title,
-                category=prob.category,
-                difficulty=prob.difficulty,
-                duration_min=prob.duration_min,
-                prompt_text=prob.statement,
-                constraints_json=json.dumps(prob.constraints),
-                optimal_complexity=prob.optimal_complexity,
-                edge_cases_json=json.dumps(prob.key_edge_cases),
-            ))
+            constraints_str = json.dumps(prob.constraints)
+            edge_cases_str = json.dumps(prob.key_edge_cases)
+            row = existing_rows.get(prob.id)
+            if row is None:
+                db.add(ProblemRecord(
+                    id=prob.id,
+                    title=prob.title,
+                    category=prob.category,
+                    difficulty=prob.difficulty,
+                    duration_min=prob.duration_min,
+                    prompt_text=prob.statement,
+                    constraints_json=constraints_str,
+                    optimal_complexity=prob.optimal_complexity,
+                    edge_cases_json=edge_cases_str,
+                ))
+            else:
+                row.title = prob.title
+                row.category = prob.category
+                row.difficulty = prob.difficulty
+                row.duration_min = prob.duration_min
+                row.prompt_text = prob.statement
+                row.constraints_json = constraints_str
+                row.optimal_complexity = prob.optimal_complexity
+                row.edge_cases_json = edge_cases_str
         await db.commit()
 
 
-async def list_problems() -> list[Problem]:
+seed_problems = seed_problems_if_empty
+
+
+async def list_problems(user_id: str | None = None) -> list[Problem]:
     factory = get_session_factory()
     async with factory() as db:
         rows = (await db.scalars(select(ProblemRecord))).all()
-        return [_to_problem_schema(row) for row in rows]
+        stats_by_problem: dict[str, dict] = {}
+        if user_id:
+            session_rows = (
+                await db.scalars(
+                    select(SessionRecord).where(SessionRecord.user_id == user_id)
+                )
+            ).all()
+            for s in session_rows:
+                entry = stats_by_problem.setdefault(
+                    s.problem_id,
+                    {"attempts_count": 0, "best_score": None, "last_practiced_at": None},
+                )
+                entry["attempts_count"] += 1
+                score_val = float(s.overall_score)
+                if entry["best_score"] is None or score_val > entry["best_score"]:
+                    entry["best_score"] = round(score_val, 1)
+                ts_iso = s.created_at.isoformat()
+                if entry["last_practiced_at"] is None or ts_iso > entry["last_practiced_at"]:
+                    entry["last_practiced_at"] = ts_iso
+
+        # Preserve curated catalog order, appending any extra DB-only rows at the end
+        order_index = {pid: idx for idx, pid in enumerate(PROBLEMS.keys())}
+        rows_sorted = sorted(rows, key=lambda r: order_index.get(r.id, len(order_index)))
+        result: list[Problem] = []
+        for row in rows_sorted:
+            prob = _to_problem_schema(row)
+            stat = stats_by_problem.get(row.id)
+            if stat:
+                prob.attempts_count = stat["attempts_count"]
+                prob.best_score = stat["best_score"]
+                prob.last_practiced_at = stat["last_practiced_at"]
+            result.append(prob)
+        return result
+
+
+async def list_user_session_records(user_id: str) -> list[SessionRecord]:
+    factory = get_session_factory()
+    async with factory() as db:
+        return list(
+            (
+                await db.scalars(
+                    select(SessionRecord)
+                    .where(SessionRecord.user_id == user_id)
+                    .order_by(SessionRecord.created_at.asc())
+                )
+            ).all()
+        )
 
 
 async def get_problem_by_id(problem_id: str) -> Problem | None:

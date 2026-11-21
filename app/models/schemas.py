@@ -10,13 +10,16 @@ from pydantic import BaseModel, Field
 class Problem(BaseModel):
     id: str
     title: str
-    category: Literal["DSA", "System Design", "DevOps"]
+    category: Literal["DSA", "System Design", "Debugging", "DevOps"]
     difficulty: Literal["Easy", "Medium", "Hard"]
     duration_min: int
     statement: str
     constraints: list[str]
     optimal_complexity: str
     key_edge_cases: list[str]
+    attempts_count: int = 0
+    best_score: float | None = None
+    last_practiced_at: str | None = None
 
 
 class Evaluation(BaseModel):

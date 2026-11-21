@@ -19,6 +19,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import android.util.Base64;
 import android.util.Log;
 
 import org.json.JSONObject;
@@ -305,6 +306,30 @@ public class MainActivity extends AppCompatActivity {
                 Log.w(TAG, "apiRequest " + method + " " + url + " -> HTTP " + resp.code());
             } catch (Exception e) {
                 Log.e(TAG, "apiRequest " + method + " " + url + " failed: " + e.getMessage(), e);
+            }
+            return null;
+        }
+
+        // Fetch authenticated session audio bytes as a base64 data URI for WebView <audio> playback
+        @JavascriptInterface
+        public String fetchAudioBase64(String path) {
+            String url = BackendConfig.BASE_HTTP_URL + path;
+            Request.Builder builder = new Request.Builder().url(url).get();
+            String token = AuthTokenStore.get(MainActivity.this);
+            if (token != null) {
+                builder.header("Authorization", "Bearer " + token);
+            }
+            try (Response resp = apiClient.newCall(builder.build()).execute()) {
+                if (resp.isSuccessful() && resp.body() != null) {
+                    byte[] raw = resp.body().bytes();
+                    String contentType = resp.header("Content-Type", "audio/ogg");
+                    int semi = contentType.indexOf(';');
+                    if (semi > 0) contentType = contentType.substring(0, semi).trim();
+                    return "data:" + contentType + ";base64," + Base64.encodeToString(raw, Base64.NO_WRAP);
+                }
+                Log.w(TAG, "fetchAudioBase64 " + url + " -> HTTP " + resp.code());
+            } catch (Exception e) {
+                Log.e(TAG, "fetchAudioBase64 " + url + " failed: " + e.getMessage(), e);
             }
             return null;
         }
