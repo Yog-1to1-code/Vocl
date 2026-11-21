@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.engine import make_url
 
 from app.config import settings
 from app.db.database import dispose_database, init_database
@@ -19,10 +20,11 @@ _STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     await init_database()
+    redacted_db = make_url(settings.DATABASE_URL).render_as_string(hide_password=True)
     logging.getLogger(__name__).info(
         "Vocl started (AI=%s, DB=%s)",
         "MOCK" if settings.USE_MOCK_AI else "LIVE",
-        settings.DATABASE_URL,
+        redacted_db,
     )
     yield
     await dispose_database()

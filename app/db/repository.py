@@ -138,6 +138,8 @@ async def record_session_and_increment_quota(
             audio_path=audio_path,
         )
         db.add(record)
+        # Flush parent SessionRecord before inserting child SessionEventRecord rows (enforced by Postgres FK)
+        await db.flush()
 
         for ev in events or []:
             db.add(SessionEventRecord(
