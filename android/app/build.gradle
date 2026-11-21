@@ -22,7 +22,7 @@ android {
     productFlavors {
         prod {
             dimension "env"
-            buildConfigField "String", "BACKEND_HOST", '"vocl.onrender.com"'
+            buildConfigField "String", "BACKEND_HOST", '"yogeshmali-vocl-api.hf.space"'
             buildConfigField "boolean", "USE_TLS", "true"
         }
         local {
