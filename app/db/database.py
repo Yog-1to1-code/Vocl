@@ -35,7 +35,16 @@ def configure_database(url: str | None = None) -> AsyncEngine:
         return _engine
 
     _ensure_sqlite_parent_dir(target_url)
-    _engine = create_async_engine(target_url, future=True)
+    engine_kwargs: dict = {"future": True}
+    if target_url.startswith("postgresql+asyncpg://"):
+        # Disable asyncpg prepared statement caches for Supavisor transaction pooler compatibility
+        engine_kwargs["connect_args"] = {
+            "statement_cache_size": 0,
+            "prepared_statement_cache_size": 0,
+        }
+        engine_kwargs["pool_pre_ping"] = True
+
+    _engine = create_async_engine(target_url, **engine_kwargs)
     _session_factory = async_sessionmaker(_engine, expire_on_commit=False, class_=AsyncSession)
     _active_url = target_url
     return _engine

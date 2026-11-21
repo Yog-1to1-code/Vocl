@@ -8,35 +8,54 @@
 <style>
   .login-page {
     max-width: 440px; min-height: 100dvh; margin: 0 auto;
-    padding: 48px 24px calc(36px + env(safe-area-inset-bottom, 0px));
-    display: flex; flex-direction: column; justify-content: space-between; gap: 32px;
+    padding: 36px 24px calc(32px + env(safe-area-inset-bottom, 0px));
+    display: flex; flex-direction: column; justify-content: space-between; gap: 24px;
   }
-  .hero { display: flex; flex-direction: column; align-items: flex-start; gap: 18px; margin-top: 24px; }
+  .hero { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
   .logo-badge {
-    width: 64px; height: 64px; border-radius: 18px; border: 1px solid var(--surface-border);
+    width: 56px; height: 56px; border-radius: 16px; border: 1px solid var(--surface-border);
     box-shadow: 0 12px 32px rgba(40, 215, 99, 0.12);
   }
-  .headline { font-size: 34px; font-weight: 700; line-height: 1.08; letter-spacing: -0.035em; }
+  .headline { font-size: 32px; font-weight: 700; line-height: 1.08; letter-spacing: -0.035em; }
   .headline span { color: var(--green); }
-  .subtitle { font-size: 15.5px; color: var(--muted); line-height: 1.5; }
+  .subtitle { font-size: 14.5px; color: var(--muted); line-height: 1.48; }
 
-  .actions { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+  .auth-card {
+    background: var(--surface); border: 1px solid var(--surface-border); border-radius: 20px;
+    padding: 20px; display: flex; flex-direction: column; gap: 14px;
+  }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 12px; font-weight: 600; color: var(--muted); }
+  .field input {
+    height: 46px; border-radius: 12px; border: 1px solid var(--surface-border);
+    background: #08080A; color: #FFFFFF; padding: 0 14px; font-size: 15px; outline: none;
+  }
+  .field input:focus { border-color: var(--green); }
+
+  .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 2px; }
+  .btn-primary {
+    height: 48px; border-radius: 14px; border: none;
+    background: var(--green); color: #000000; font-size: 15px; font-weight: 700; cursor: pointer;
+  }
+  .btn-secondary {
+    height: 48px; border-radius: 14px; border: 1px solid var(--surface-border);
+    background: #18181C; color: #FFFFFF; font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  .btn-primary:disabled, .btn-secondary:disabled { opacity: 0.5; }
+
+  .actions { display: flex; flex-direction: column; gap: 10px; width: 100%; }
   .btn-google {
-    width: 100%; height: 54px; border-radius: 16px; border: 1px solid #303036;
-    background: #FFFFFF; color: #000000; font-size: 15.5px; font-weight: 700;
+    width: 100%; height: 50px; border-radius: 14px; border: 1px solid #303036;
+    background: #FFFFFF; color: #000000; font-size: 15px; font-weight: 700;
     display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer;
-    transition: transform 0.15s ease, opacity 0.15s ease;
   }
-  .btn-google:active { transform: scale(0.985); opacity: 0.9; }
   .btn-dev {
-    width: 100%; height: 54px; border-radius: 16px; border: 1px solid rgba(40, 215, 99, 0.45);
+    width: 100%; height: 50px; border-radius: 14px; border: 1px solid rgba(40, 215, 99, 0.45);
     background: rgba(40, 215, 99, 0.10); color: var(--green);
-    font-size: 15.5px; font-weight: 700; cursor: pointer;
-    transition: transform 0.15s ease, background 0.15s ease;
+    font-size: 15px; font-weight: 700; cursor: pointer;
   }
-  .btn-dev:active { transform: scale(0.985); background: rgba(40, 215, 99, 0.20); }
   .btn-dev:disabled, .btn-google:disabled { opacity: 0.5; }
-  .quota-note { text-align: center; font-size: 12.5px; color: #6E6E73; margin-top: 6px; }
+  .quota-note { text-align: center; font-size: 12px; color: #6E6E73; margin-top: 4px; }
 </style>
 <script src="js/vocl-bridge.js"></script>
 </head>
@@ -47,8 +66,24 @@
     <img class="logo-badge" src="img/vocl-logo.png" alt="Vocl logo">
     <h1 class="headline">Think it.<br>Say it. <span>Defend it.</span></h1>
     <p class="subtitle">
-      Sign in to save your interview autopsies, track rubric scores across sessions, and unlock 15 minutes of daily live voice practice.
+      Sign in to save your interview autopsies, track rubric scores, and unlock 15 minutes of daily live voice practice.
     </p>
+  </section>
+
+  <section class="auth-card" id="supabase-form-card">
+    <span class="card-label mono">EMAIL SIGN IN</span>
+    <div class="field">
+      <label for="email-input">Email</label>
+      <input id="email-input" type="email" autocomplete="email" placeholder="you@example.com">
+    </div>
+    <div class="field">
+      <label for="password-input">Password</label>
+      <input id="password-input" type="password" autocomplete="current-password" placeholder="At least 6 characters">
+    </div>
+    <div class="btn-row">
+      <button type="button" class="btn-primary" id="signin-btn" onclick="submitSupabaseAuth('signin')">Sign In</button>
+      <button type="button" class="btn-secondary" id="signup-btn" onclick="submitSupabaseAuth('signup')">Sign Up</button>
+    </div>
   </section>
 
   <section class="actions">
@@ -61,22 +96,73 @@
       Continue as Local Dev
     </button>
 
-    <p class="quota-note mono" id="backend-note">Pocket Mode &bull; 15 min/day free voice quota</p>
+    <p class="quota-note mono">Pocket Mode &bull; 15 min/day free voice quota</p>
   </section>
 </main>
 
 <script>
-// Hide local dev bypass only on prod flavor when not explicitly needed
+var authConfig = { supabase_url: '', supabase_key: '', dev_auth_bypass: true };
+
 (function initLogin() {
   if (getAuthToken()) {
     navigateTo('drills.html');
     return;
   }
-  if (window.VoclNative && !isLocalFlavor()) {
-    // Keep dev button available only if backend enables DEV_AUTH_BYPASS; hide by default on prod
-    document.getElementById('dev-btn').style.display = 'none';
-  }
+  voclApiJson('/api/auth/config')
+    .then(function(cfg) {
+      authConfig = cfg || authConfig;
+      var showDev = Boolean(authConfig.dev_auth_bypass) && (!window.VoclNative || isLocalFlavor());
+      document.getElementById('dev-btn').style.display = showDev ? 'block' : 'none';
+      if (!authConfig.supabase_url || !authConfig.supabase_key) {
+        document.getElementById('supabase-form-card').style.display = 'none';
+      }
+    })
+    .catch(function() {
+      if (window.VoclNative && !isLocalFlavor()) {
+        document.getElementById('dev-btn').style.display = 'none';
+      }
+    });
 })();
+
+function setAuthButtonsDisabled(disabled) {
+  document.getElementById('signin-btn').disabled = disabled;
+  document.getElementById('signup-btn').disabled = disabled;
+}
+
+function submitSupabaseAuth(mode) {
+  var email = (document.getElementById('email-input').value || '').trim();
+  var password = document.getElementById('password-input').value || '';
+  if (!email || password.length < 6) {
+    showToast('Enter a valid email and 6+ char password');
+    return;
+  }
+  if (!authConfig.supabase_url || !authConfig.supabase_key) {
+    showToast('Supabase Auth is not configured on this backend');
+    return;
+  }
+
+  setAuthButtonsDisabled(true);
+  var endpoint = mode === 'signup' ? '/auth/v1/signup' : '/auth/v1/token?grant_type=password';
+  voclSupabaseAuthPost(authConfig.supabase_url, authConfig.supabase_key, endpoint, {
+    email: email,
+    password: password
+  })
+    .then(function(data) {
+      var token = data.access_token || (data.session && data.session.access_token);
+      if (!token) {
+        showToast('Account created — check your email to confirm');
+        return;
+      }
+      saveAuthToken(token);
+      navigateTo('drills.html');
+    })
+    .catch(function(err) {
+      showToast(err && err.message ? err.message : 'Authentication failed');
+    })
+    .finally(function() {
+      setAuthButtonsDisabled(false);
+    });
+}
 
 function signInAsLocalDev() {
   var btn = document.getElementById('dev-btn');
@@ -103,8 +189,7 @@ function signInAsLocalDev() {
 }
 
 function signInWithGoogle() {
-  // Native Credential Manager OAuth hooks in when GOOGLE_CLIENT_ID is configured
-  showToast('Google OAuth requires GOOGLE_CLIENT_ID — use Local Dev for local builds');
+  showToast('Enable Google OAuth in Supabase Auth to use Google Sign-In');
 }
 </script>
 </body>

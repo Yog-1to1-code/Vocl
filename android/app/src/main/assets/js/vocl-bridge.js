@@ -131,6 +131,44 @@ function voclApiJson(path, method, payload) {
     });
 }
 
+function voclSupabaseAuthPost(supabaseUrl, apiKey, endpoint, payload) {
+    var fullUrl = supabaseUrl.replace(/\/$/, '') + endpoint;
+    var jsonBody = JSON.stringify(payload || {});
+    if (window.VoclNative && typeof window.VoclNative.supabaseAuthPost === 'function') {
+        return new Promise(function(resolve, reject) {
+            setTimeout(function() {
+                try {
+                    var raw = window.VoclNative.supabaseAuthPost(fullUrl, apiKey, jsonBody);
+                    if (!raw) {
+                        reject(new Error('Network error contacting Supabase Auth'));
+                        return;
+                    }
+                    var wrapped = JSON.parse(raw);
+                    var data = {};
+                    try { data = JSON.parse(wrapped.body || '{}'); } catch (e) {}
+                    if (!wrapped.ok) {
+                        reject(new Error(data.error_description || data.msg || data.message || ('Auth HTTP ' + wrapped.status)));
+                        return;
+                    }
+                    resolve(data);
+                } catch (err) {
+                    reject(err);
+                }
+            }, 0);
+        });
+    }
+    return fetch(fullUrl, {
+        method: 'POST',
+        headers: { 'apikey': apiKey, 'Content-Type': 'application/json' },
+        body: jsonBody
+    }).then(function(res) {
+        return res.json().then(function(data) {
+            if (!res.ok) throw new Error(data.error_description || data.msg || data.message || ('Auth HTTP ' + res.status));
+            return data;
+        });
+    });
+}
+
 function startSession(problemId) {
     if (window.VoclNative && typeof window.VoclNative.startSession === 'function') {
         window.VoclNative.startSession(problemId);

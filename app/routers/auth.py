@@ -34,6 +34,16 @@ def _serialize_user(user: UserRecord, remaining_minutes: float) -> dict:
     }
 
 
+@router.get("/config")
+async def get_auth_config() -> dict:
+    """Expose public Supabase client config (never secret keys) to mobile/web clients."""
+    return {
+        "supabase_url": settings.SUPABASE_URL,
+        "supabase_key": settings.SUPABASE_PUBLISHABLE_KEY,
+        "dev_auth_bypass": settings.DEV_AUTH_BYPASS,
+    }
+
+
 @router.post("/google")
 async def login_with_google(body: GoogleLoginRequest) -> dict:
     info = verify_google_id_token(body.id_token)

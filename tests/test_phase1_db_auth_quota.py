@@ -174,3 +174,91 @@ def test_daily_quota_enforcement_4429_and_date_reset(isolated_phase1_db: Path) -
                 msg = ws.receive()
                 if msg.get("text") and json.loads(msg["text"]).get("type") == "autopsy":
                     break
+
+
+def test_auth_config_exposes_supabase_public_settings(isolated_phase1_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(config.settings, "SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setattr(config.settings, "SUPABASE_PUBLISHABLE_KEY", "sb_publishable_test_key")
+    monkeypatch.setattr(config.settings, "DEV_AUTH_BYPASS", True)
+
+    with TestClient(app) as client:
+        resp = client.get("/api/auth/config")
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "supabase_url": "https://example.supabase.co",
+            "supabase_key": "sb_publishable_test_key",
+            "dev_auth_bypass": True,
+        }
+
+
+def test_supabase_jwks_es256_token_auto_upserts_user(isolated_phase1_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import jwt as pyjwt
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    private_key = ec.generate_private_key(ec.SECP256R1())
+    public_key = private_key.public_key()
+
+    class _FakeSigningKey:
+        key = public_key
+
+    class _FakeJWKSClient:
+        def get_signing_key_from_jwt(self, _token: str) -> _FakeSigningKey:
+            return _FakeSigningKey()
+
+    monkeypatch.setattr(config.settings, "SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setattr(auth_service, "_get_supabase_jwks_client", lambda: _FakeJWKSClient())
+
+    now = datetime.now(timezone.utc)
+    supabase_jwt = pyjwt.encode(
+        {
+            "sub": "11111111-2222-3333-4444-555555555555",
+            "email": "supabase.user@vocl.dev",
+            "aud": "authenticated",
+            "iat": int(now.timestamp()),
+            "exp": int((now + timedelta(hours=1)).timestamp()),
+        },
+        private_key,
+        algorithm="ES256",
+    )
+
+    with TestClient(app) as client:
+        me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {supabase_jwt}"})
+        assert me.status_code == 200
+        profile = me.json()
+        assert profile["email"] == "supabase.user@vocl.dev"
+        assert profile["name"] == "supabase.user"
+        assert profile["remaining_minutes"] == 15.0
+
+        sessions = client.get("/api/sessions", headers={"Authorization": f"Bearer {supabase_jwt}"})
+        assert sessions.status_code == 200
+        assert sessions.json() == []
+
+
+def test_asyncpg_engine_disables_prepared_statement_caches(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict = {}
+
+    def _fake_create_async_engine(url: str, **kwargs):
+        captured["url"] = url
+        captured["kwargs"] = kwargs
+        return object()
+
+    monkeypatch.setattr(database, "create_async_engine", _fake_create_async_engine)
+    monkeypatch.setattr(database, "async_sessionmaker", lambda *args, **kwargs: object())
+    database._engine = None
+    database._session_factory = None
+    database._active_url = ""
+
+    pg_url = "postgresql+asyncpg://postgres.ref:secret@aws-0-ap-south-1.pooler.supabase.com:6543/postgres"
+    database.configure_database(pg_url)
+
+    assert captured["url"] == pg_url
+    assert captured["kwargs"]["connect_args"] == {
+        "statement_cache_size": 0,
+        "prepared_statement_cache_size": 0,
+    }
+    assert captured["kwargs"]["pool_pre_ping"] is True
+
+    # Reset globals so subsequent tests start clean
+    database._engine = None
+    database._session_factory = None
+    database._active_url = ""

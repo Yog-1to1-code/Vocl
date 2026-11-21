@@ -308,5 +308,30 @@ public class MainActivity extends AppCompatActivity {
             }
             return null;
         }
+
+        // Native OkHttp proxy for Supabase Auth REST calls (bypasses WebView file:// CORS)
+        @JavascriptInterface
+        public String supabaseAuthPost(String fullUrl, String apiKey, String jsonBody) {
+            RequestBody body = RequestBody.create(
+                    jsonBody != null ? jsonBody : "{}",
+                    MediaType.parse("application/json; charset=utf-8"));
+            Request req = new Request.Builder()
+                    .url(fullUrl)
+                    .header("apikey", apiKey != null ? apiKey : "")
+                    .header("Content-Type", "application/json")
+                    .post(body)
+                    .build();
+            try (Response resp = apiClient.newCall(req).execute()) {
+                String respBody = resp.body() != null ? resp.body().string() : "{}";
+                JSONObject wrapped = new JSONObject();
+                wrapped.put("ok", resp.isSuccessful());
+                wrapped.put("status", resp.code());
+                wrapped.put("body", respBody);
+                return wrapped.toString();
+            } catch (Exception e) {
+                Log.e(TAG, "supabaseAuthPost failed: " + e.getMessage(), e);
+                return null;
+            }
+        }
     }
 }

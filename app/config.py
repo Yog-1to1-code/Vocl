@@ -26,6 +26,9 @@ MOCK_REASONING_LATENCY_SEC: float = 1.5
 CSV_PATH: str = os.environ.get("CSV_PATH", "data/sessions.csv")
 DATABASE_URL: str = os.environ.get("DATABASE_URL", "sqlite+aiosqlite:///./data/vocl.db")
 
+SUPABASE_URL: str = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
+SUPABASE_PUBLISHABLE_KEY: str = os.environ.get("SUPABASE_PUBLISHABLE_KEY", "").strip()
+
 JWT_SECRET_KEY: str = os.environ.get("JWT_SECRET_KEY", "vocl-local-dev-secret-change-in-prod-32bytes")
 JWT_ALGORITHM: str = os.environ.get("JWT_ALGORITHM", "HS256")
 JWT_EXPIRE_HOURS: int = int(os.environ.get("JWT_EXPIRE_HOURS", "168"))
