@@ -19,7 +19,7 @@
   }
   .profile-identity { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
   .profile-name { font-size: 19px; font-weight: 700; letter-spacing: -0.02em; }
-  .profile-role { font-size: 13.5px; color: var(--muted); }
+  .profile-role { font-size: 13.5px; color: var(--muted); word-break: break-all; }
 
   .stats-grid { display: grid; grid-template-columns: 1fr 1px 1fr; gap: 14px; align-items: center; padding-top: 2px; }
   .v-sep { height: 34px; background: var(--surface-border); }
@@ -27,8 +27,14 @@
   .stat-val { font-size: 22px; font-weight: 700; color: #FFFFFF; line-height: 1.1; }
   .stat-lbl { font-size: 12px; color: var(--muted); }
 
+  .quota-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .quota-val { font-size: 14px; font-weight: 600; color: var(--green); }
+  .bar-track { height: 6px; border-radius: 9999px; background: #26262A; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 9999px; background: var(--green); transition: width 0.3s ease; }
+
   .pref-sub { font-size: 13px; color: var(--muted); line-height: 1.45; }
 
+  .action-stack { display: flex; flex-direction: column; gap: 10px; }
   .reset-btn {
     width: 100%; height: 48px; border-radius: 14px;
     background: rgba(255, 69, 58, 0.06); border: 1px solid rgba(255, 69, 58, 0.45);
@@ -37,6 +43,13 @@
   }
   .reset-btn:active { transform: scale(0.985); background: rgba(255, 69, 58, 0.16); }
   .reset-btn:disabled { opacity: 0.5; }
+  .signout-btn {
+    width: 100%; height: 48px; border-radius: 14px;
+    background: #161618; border: 1px solid var(--surface-border);
+    color: #FFFFFF; font-size: 14.5px; font-weight: 600; cursor: pointer;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+  }
+  .signout-btn:active { transform: scale(0.985); border-color: #3A3A42; }
 </style>
 <script src="js/vocl-bridge.js"></script>
 </head>
@@ -50,10 +63,10 @@
 
   <section class="card">
     <div class="profile-header">
-      <div class="avatar mono">YM</div>
+      <div class="avatar mono" id="user-initials">YM</div>
       <div class="profile-identity">
-        <div class="profile-name">Yogesh Mali</div>
-        <div class="profile-role">CSE &bull; Commute Mode</div>
+        <div class="profile-name" id="user-name">Yogesh Mali</div>
+        <div class="profile-role" id="user-email">yogesh@vocl.local</div>
       </div>
     </div>
     <div class="divider"></div>
@@ -71,15 +84,63 @@
   </section>
 
   <section class="card">
-    <span class="card-label mono">SESSION HISTORY</span>
-    <p class="pref-sub">Clear all recorded interview sessions and reset your grades board.</p>
-    <button class="reset-btn" id="reset-btn" onclick="resetDemoSessions()">Reset Demo Sessions</button>
+    <div class="quota-row">
+      <span class="card-label mono">DAILY VOICE QUOTA</span>
+      <span class="quota-val mono" id="quota-remaining">15.0 min left</span>
+    </div>
+    <div class="bar-track"><div class="bar-fill" id="quota-bar" style="width:0%;"></div></div>
+    <p class="pref-sub mono" id="quota-detail">0.0 / 15.0 min used today</p>
+  </section>
+
+  <section class="card">
+    <span class="card-label mono">ACCOUNT &amp; SESSIONS</span>
+    <p class="pref-sub">Reset your recorded interview history or sign out of this device.</p>
+    <div class="action-stack">
+      <button class="reset-btn" id="reset-btn" onclick="resetDemoSessions()">Reset Demo Sessions</button>
+      <button class="signout-btn" id="signout-btn" onclick="signOut()">Sign Out</button>
+    </div>
   </section>
 </main>
 
 <script>renderBottomNav('profile');</script>
 
 <script>
+function initialsFromName(name) {
+  var parts = String(name || 'V').trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return parts[0].slice(0, 2).toUpperCase();
+}
+
+function renderProfile(user) {
+  if (!user) return;
+  document.getElementById('user-name').textContent = user.name || 'Vocl User';
+  document.getElementById('user-email').textContent = user.email || '';
+  document.getElementById('user-initials').textContent = initialsFromName(user.name || user.email);
+
+  var used = Number(user.daily_minutes_used || 0);
+  var limit = Number(user.daily_quota_minutes || 15);
+  var remaining = Number(user.remaining_minutes != null ? user.remaining_minutes : Math.max(0, limit - used));
+  var pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+
+  document.getElementById('quota-remaining').textContent = remaining.toFixed(1) + ' min left';
+  document.getElementById('quota-detail').textContent = used.toFixed(1) + ' / ' + limit.toFixed(1) + ' min used today';
+  document.getElementById('quota-bar').style.width = pct + '%';
+}
+
+function loadUserProfile() {
+  try {
+    var cached = JSON.parse(localStorage.getItem('voclUser') || 'null');
+    if (cached) renderProfile(cached);
+  } catch (e) {}
+
+  voclApiJson('/api/auth/me')
+    .then(function(user) {
+      localStorage.setItem('voclUser', JSON.stringify(user));
+      renderProfile(user);
+    })
+    .catch(function() {});
+}
+
 function loadSessionStats() {
   voclApiJson('/api/sessions')
     .then(function(list) {
@@ -122,6 +183,14 @@ function resetDemoSessions() {
     });
 }
 
+function signOut() {
+  clearAuthToken();
+  localStorage.removeItem('voclSessions');
+  localStorage.removeItem('lastAutopsy');
+  navigateTo('login.html');
+}
+
+loadUserProfile();
 loadSessionStats();
 </script>
 </body>

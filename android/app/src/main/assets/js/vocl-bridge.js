@@ -66,13 +66,46 @@ function getBackendUrl() {
     return 'http://10.0.2.2:8080';
 }
 
-function voclApiJson(path, method) {
+function saveAuthToken(token) {
+    if (window.VoclNative && typeof window.VoclNative.saveAuthToken === 'function') {
+        window.VoclNative.saveAuthToken(token);
+    }
+    try { localStorage.setItem('voclAuthToken', token || ''); } catch (e) {}
+}
+
+function getAuthToken() {
+    if (window.VoclNative && typeof window.VoclNative.getAuthToken === 'function') {
+        var nativeToken = window.VoclNative.getAuthToken();
+        if (nativeToken) return nativeToken;
+    }
+    try { return localStorage.getItem('voclAuthToken') || ''; } catch (e) { return ''; }
+}
+
+function clearAuthToken() {
+    if (window.VoclNative && typeof window.VoclNative.clearAuthToken === 'function') {
+        window.VoclNative.clearAuthToken();
+    }
+    try {
+        localStorage.removeItem('voclAuthToken');
+        localStorage.removeItem('voclUser');
+    } catch (e) {}
+}
+
+function isLocalFlavor() {
+    if (window.VoclNative && typeof window.VoclNative.isLocalFlavor === 'function') {
+        return Boolean(window.VoclNative.isLocalFlavor());
+    }
+    return true;
+}
+
+function voclApiJson(path, method, payload) {
     var verb = method || 'GET';
-    if (window.VoclNative && typeof window.VoclNative.apiRequest === 'function') {
+    var jsonBody = payload !== undefined ? JSON.stringify(payload) : null;
+    if (window.VoclNative && typeof window.VoclNative.apiRequestWithBody === 'function') {
         return new Promise(function(resolve, reject) {
             setTimeout(function() {
                 try {
-                    var body = window.VoclNative.apiRequest(verb, path);
+                    var body = window.VoclNative.apiRequestWithBody(verb, path, jsonBody);
                     if (body == null) {
                         reject(new Error('Native API request failed: ' + path));
                         return;
@@ -84,7 +117,15 @@ function voclApiJson(path, method) {
             }, 0);
         });
     }
-    return fetch(getBackendUrl() + path, { method: verb }).then(function(res) {
+    var headers = {};
+    var token = getAuthToken();
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    var opts = { method: verb, headers: headers };
+    if (jsonBody !== null) {
+        headers['Content-Type'] = 'application/json';
+        opts.body = jsonBody;
+    }
+    return fetch(getBackendUrl() + path, opts).then(function(res) {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         return res.json();
     });

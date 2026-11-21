@@ -2,7 +2,9 @@ import logging
 
 from fastapi import APIRouter, WebSocket
 
-from app.data.problems import PROBLEMS
+from app.config import settings
+from app.db.repository import check_and_reset_daily_quota, get_problem_by_id
+from app.services.auth import authenticate_websocket_user
 from app.services.live_manager import create_session_bridge
 
 logger = logging.getLogger(__name__)
@@ -12,13 +14,27 @@ router = APIRouter(tags=["websocket"])
 
 @router.websocket("/ws/interview/{problem_id}")
 async def interview_websocket(websocket: WebSocket, problem_id: str) -> None:
-    if problem_id not in PROBLEMS:
+    user = await authenticate_websocket_user(websocket)
+    if user is None:
+        await websocket.close(code=4401, reason="Unauthorized")
+        return
+
+    problem = await get_problem_by_id(problem_id)
+    if problem is None:
         await websocket.close(code=4004, reason=f"Unknown problem: {problem_id}")
         return
 
+    user, _remaining = await check_and_reset_daily_quota(user.id)
+    if user is None:
+        await websocket.close(code=4401, reason="Unauthorized")
+        return
+    if user.daily_minutes_used >= settings.DAILY_QUOTA_MINUTES:
+        await websocket.close(code=4429, reason="Daily quota reached")
+        return
+
     await websocket.accept()
-    bridge = create_session_bridge(problem_id)
-    logger.info("Interview %s started (%s)", problem_id, type(bridge).__name__)
+    bridge = create_session_bridge(problem_id, user_id=user.id)
+    logger.info("Interview %s started for user %s (%s)", problem_id, user.email, type(bridge).__name__)
     try:
         autopsy = await bridge.run(websocket)
         logger.info("Session %s complete: score=%.1f optimal=%s", autopsy.session_id, autopsy.score, autopsy.is_optimal)

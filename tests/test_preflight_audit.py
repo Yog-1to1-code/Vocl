@@ -212,33 +212,42 @@ def test_end_session_during_in_flight_tool_call(monkeypatch):
 def test_zero_evaluation_early_exit_and_404_routes(tmp_path, monkeypatch):
     """Verify 0-evaluation early exit produces valid Autopsy and invalid problem IDs return 404."""
     from fastapi.testclient import TestClient
-    import app.services.csv_storage as csv_storage
+    import app.config as config
+    import app.db.database as database
     from app.main import app
 
-    monkeypatch.setattr(csv_storage, "CSV_PATH", str(tmp_path / "early_exit.csv"))
-    client = TestClient(app)
+    db_url = f"sqlite+aiosqlite:///{tmp_path / 'early_exit.db'}"
+    monkeypatch.setattr(config, "DATABASE_URL", db_url)
+    monkeypatch.setattr(config, "DEV_AUTH_BYPASS", True)
+    asyncio.run(database.dispose_database())
+    asyncio.run(database.init_database(db_url))
 
-    # Unknown problem via REST returns 404 instead of unhandled KeyError
-    resp = client.get("/api/problems/nonexistent-problem")
-    assert resp.status_code == 404
+    with TestClient(app) as client:
+        # Unknown problem via REST returns 404 instead of unhandled KeyError
+        resp = client.get("/api/problems/nonexistent-problem")
+        assert resp.status_code == 404
 
-    # Early exit before any approach is proposed
-    with client.websocket_connect("/ws/interview/url-shortener") as ws:
-        ws.send_text('{"type": "end_session"}')
-        autopsy = None
-        for _ in range(30):
-            msg = ws.receive()
-            if msg.get("text"):
-                payload = __import__("json").loads(msg["text"])
-                if payload.get("type") == "autopsy":
-                    autopsy = payload
-                    break
-        assert autopsy is not None
-        assert autopsy["problem_id"] == "url-shortener"
-        assert autopsy["final_complexity"] == "Not evaluated"
-        assert autopsy["score"] == 0.0
-        assert autopsy["is_optimal"] is False
-        assert autopsy["timestamp_utc"]
+        token = client.post("/api/auth/dev-login", json={"email": "early@vocl.local"}).json()["access_token"]
+
+        # Early exit before any approach is proposed
+        with client.websocket_connect(f"/ws/interview/url-shortener?token={token}") as ws:
+            ws.send_text('{"type": "end_session"}')
+            autopsy = None
+            for _ in range(30):
+                msg = ws.receive()
+                if msg.get("text"):
+                    payload = __import__("json").loads(msg["text"])
+                    if payload.get("type") == "autopsy":
+                        autopsy = payload
+                        break
+            assert autopsy is not None
+            assert autopsy["problem_id"] == "url-shortener"
+            assert autopsy["final_complexity"] == "Not evaluated"
+            assert autopsy["score"] == 0.0
+            assert autopsy["is_optimal"] is False
+            assert autopsy["timestamp_utc"]
+
+    asyncio.run(database.dispose_database())
 
 
 def test_upstream_audio_flows_during_system2_analysis(monkeypatch):

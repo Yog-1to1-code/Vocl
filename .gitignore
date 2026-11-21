@@ -22,6 +22,7 @@ __pycache__/
 .pytest_cache/
 .env
 data/sessions.csv
+data/vocl.db*
 data/recordings/
 .DS_Store
 tests/fixtures/last_ai_response.wav

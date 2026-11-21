@@ -167,7 +167,12 @@ public class VoclAudioService extends Service {
         audioEngine.startPlayback();
 
         String wsUrl = BackendConfig.BASE_WS_URL + "/ws/interview/" + problemId;
-        Request request = new Request.Builder().url(wsUrl).build();
+        Request.Builder requestBuilder = new Request.Builder().url(wsUrl);
+        String token = AuthTokenStore.get(this);
+        if (token != null) {
+            requestBuilder.header("Authorization", "Bearer " + token);
+        }
+        Request request = requestBuilder.build();
 
         webSocket = httpClient.newWebSocket(request, new WebSocketListener() {
             @Override

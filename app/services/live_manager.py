@@ -23,9 +23,9 @@ from app.config import (
     settings,
 )
 from app.data.problems import PROBLEMS
-from app.models.schemas import Autopsy, Evaluation, FinalRubricGrade, Problem, SessionRow
+from app.db.repository import record_session_and_increment_quota
+from app.models.schemas import Autopsy, Evaluation, FinalRubricGrade, Problem
 from app.prompts import build_final_grade_prompt, build_live_system_prompt
-from app.services.csv_storage import append_session
 from app.services.gemini_client import gemini_client
 from app.services.reasoning_engine import (
     SYSTEM2_TIMEOUT_RESPONSE,
@@ -143,19 +143,29 @@ class LiveSessionState:
     client_status: str = ""
     upstream_bytes_received: int = 0
     upstream_bytes_during_analysis: int = 0
+    audio_path: str | None = None
+    events: list[dict] = field(default_factory=list)
 
 
 class SessionBridge:
     """Shared client-facing contract for real and mock interview sessions."""
 
-    def __init__(self, problem_id: str) -> None:
+    def __init__(self, problem_id: str, user_id: str | None = None) -> None:
         self.problem = PROBLEMS[problem_id]
+        self.user_id = user_id
         self.state = LiveSessionState(problem_id=problem_id)
         self._ws_write_lock = asyncio.Lock()
         self._closed = False
 
     async def run(self, ws: WebSocket) -> Autopsy:
         raise NotImplementedError
+
+    def _log_event(self, event_type: str, latency_ms: float | None = None, payload: dict | None = None) -> None:
+        self.state.events.append({
+            "event_type": event_type,
+            "latency_ms": round(latency_ms, 2) if latency_ms is not None else None,
+            "payload": payload or {},
+        })
 
     async def _update_client_status(self, ws: WebSocket, status: str) -> None:
         if self._closed or status == self.state.client_status:
@@ -166,29 +176,30 @@ class SessionBridge:
     async def _record_evaluation(self, ws: WebSocket, summary: str) -> Evaluation:
         await self._update_client_status(ws, "analyzing")
         await self._send_json(ws, {"type": "tool_call", "name": "evaluate_approach", "summary": summary})
+        self._log_event("tool_call", payload={"name": "evaluate_approach"})
+        t0 = time.monotonic()
         evaluation = await evaluate_candidate_approach(self.problem, summary)
+        elapsed_ms = (time.monotonic() - t0) * 1000.0
         self.state.evaluations.append(evaluation)
+        event_kind = "timeout" if is_timeout_evaluation(evaluation) else "tool_result"
+        self._log_event(
+            event_kind,
+            latency_ms=elapsed_ms,
+            payload={"time_complexity": evaluation.time_complexity, "is_optimal": evaluation.is_optimal},
+        )
         await self._send_json(ws, {"type": "tool_result", **evaluation.model_dump()})
         return evaluation
 
     async def _persist_and_send_autopsy(self, ws: WebSocket, evaluations: list[Evaluation]) -> Autopsy:
         autopsy = summarize_evaluations(self.state, evaluations)
-        await append_session(SessionRow(
-            session_id=autopsy.session_id,
-            timestamp_utc=autopsy.timestamp_utc,
-            problem_id=autopsy.problem_id,
-            duration_sec=autopsy.duration_sec,
-            final_complexity=autopsy.final_complexity,
-            is_optimal=autopsy.is_optimal,
-            score=autopsy.score,
-            correctness_score=autopsy.correctness_score,
-            complexity_score=autopsy.complexity_score,
-            edge_cases_score=autopsy.edge_cases_score,
-            communication_score=autopsy.communication_score,
-            grading_source=autopsy.grading_source,
-            missed_edge_cases="; ".join(autopsy.missed_edge_cases),
-            summary_feedback=autopsy.summary_feedback,
-        ))
+        self._log_event("ws_close", payload={"duration_sec": autopsy.duration_sec, "grading_source": autopsy.grading_source})
+        if self.user_id:
+            await record_session_and_increment_quota(
+                self.user_id,
+                autopsy,
+                audio_path=self.state.audio_path,
+                events=self.state.events,
+            )
         await self._send_json(ws, {"type": "autopsy", **autopsy.model_dump()}, allow_when_closing=True)
         return autopsy
 
@@ -216,8 +227,8 @@ class SessionBridge:
 class LiveSessionManager(SessionBridge):
     """Bridges a client WebSocket to a Gemini Live session with System 2 tool calls."""
 
-    def __init__(self, problem_id: str) -> None:
-        super().__init__(problem_id)
+    def __init__(self, problem_id: str, user_id: str | None = None) -> None:
+        super().__init__(problem_id, user_id=user_id)
         self._background_tasks: set[asyncio.Task] = set()
         self._tool_call_in_flight: bool = False
         self._last_tool_call_timestamp: float = 0.0
@@ -276,7 +287,9 @@ class LiveSessionManager(SessionBridge):
 
         if self._recorder is not None:
             try:
-                self._recorder.save_stereo_wav()
+                saved = self._recorder.save_stereo_wav()
+                if saved is not None:
+                    self.state.audio_path = str(saved)
             except Exception:
                 logger.exception("Failed to save session audio mix")
 
@@ -295,6 +308,7 @@ class LiveSessionManager(SessionBridge):
             if self.state.evaluations
             else None
         )
+        t0 = time.monotonic()
         try:
             await session.send_client_content(
                 turns=types.Content(
@@ -304,7 +318,9 @@ class LiveSessionManager(SessionBridge):
                 turn_complete=True,
             )
             await asyncio.wait_for(self._final_grade_ready.wait(), timeout=settings.FINAL_GRADE_TIMEOUT_SEC)
+            self._log_event("final_grade", latency_ms=(time.monotonic() - t0) * 1000.0, payload={"source": "gemini_live"})
         except asyncio.TimeoutError:
+            self._log_event("timeout", latency_ms=(time.monotonic() - t0) * 1000.0, payload={"stage": "final_grade"})
             logger.warning("Gemini Live final rubric grade timed out after %.1fs; using fallback", settings.FINAL_GRADE_TIMEOUT_SEC)
         except Exception:
             logger.warning("Gemini Live final rubric grade failed; using fallback", exc_info=True)
@@ -424,8 +440,8 @@ class LiveSessionManager(SessionBridge):
 class MockLiveSessionManager(SessionBridge):
     """Offline stand-in for Gemini Live that honours the exact same WebSocket contract."""
 
-    def __init__(self, problem_id: str) -> None:
-        super().__init__(problem_id)
+    def __init__(self, problem_id: str, user_id: str | None = None) -> None:
+        super().__init__(problem_id, user_id=user_id)
         self._turn_task: asyncio.Task | None = None
         self._background_tasks: set[asyncio.Task] = set()
         self._pending_candidate_bytes = 0
@@ -522,8 +538,12 @@ class MockLiveSessionManager(SessionBridge):
             await asyncio.gather(*self._background_tasks, return_exceptions=True)
 
 
-def create_session_bridge(problem_id: str) -> SessionBridge:
-    return MockLiveSessionManager(problem_id) if USE_MOCK_AI else LiveSessionManager(problem_id)
+def create_session_bridge(problem_id: str, user_id: str | None = None) -> SessionBridge:
+    return (
+        MockLiveSessionManager(problem_id, user_id=user_id)
+        if USE_MOCK_AI
+        else LiveSessionManager(problem_id, user_id=user_id)
+    )
 
 
 def _clamp_score(value: float) -> float:

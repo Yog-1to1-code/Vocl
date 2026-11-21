@@ -25,8 +25,10 @@ import org.json.JSONObject;
 
 import java.util.concurrent.TimeUnit;
 
+import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
+import okhttp3.RequestBody;
 import okhttp3.Response;
 
 public class MainActivity extends AppCompatActivity {
@@ -71,7 +73,10 @@ public class MainActivity extends AppCompatActivity {
         configureWebView();
         requestPermissions();
 
-        webView.loadUrl("file:///android_asset/drills.html");
+        String startPage = AuthTokenStore.get(this) != null
+                ? "file:///android_asset/drills.html"
+                : "file:///android_asset/login.html";
+        webView.loadUrl(startPage);
     }
 
     private void configureWebView() {
@@ -248,13 +253,48 @@ public class MainActivity extends AppCompatActivity {
             VoclAudioService.setMicMuted(muted);
         }
 
-        // Native OkHttp proxy bypasses WebView file:// CORS/origin quirks on real phones
+        @JavascriptInterface
+        public void saveAuthToken(String token) {
+            AuthTokenStore.save(MainActivity.this, token);
+        }
+
+        @JavascriptInterface
+        public String getAuthToken() {
+            String token = AuthTokenStore.get(MainActivity.this);
+            return token != null ? token : "";
+        }
+
+        @JavascriptInterface
+        public void clearAuthToken() {
+            AuthTokenStore.clear(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public boolean isLocalFlavor() {
+            return "local".equals(BuildConfig.FLAVOR);
+        }
+
+        // Native OkHttp proxy bypasses WebView file:// CORS/origin quirks and attaches JWT
         @JavascriptInterface
         public String apiRequest(String method, String path) {
+            return apiRequestWithBody(method, path, null);
+        }
+
+        @JavascriptInterface
+        public String apiRequestWithBody(String method, String path, String jsonBody) {
             String url = BackendConfig.BASE_HTTP_URL + path;
             Request.Builder builder = new Request.Builder().url(url);
+            String token = AuthTokenStore.get(MainActivity.this);
+            if (token != null) {
+                builder.header("Authorization", "Bearer " + token);
+            }
             if ("DELETE".equalsIgnoreCase(method)) {
                 builder.delete();
+            } else if ("POST".equalsIgnoreCase(method)) {
+                RequestBody body = RequestBody.create(
+                        jsonBody != null ? jsonBody : "{}",
+                        MediaType.parse("application/json; charset=utf-8"));
+                builder.post(body);
             } else {
                 builder.get();
             }

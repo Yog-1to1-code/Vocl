@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 import logging
 from pathlib import Path
 
@@ -6,15 +7,33 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.config import USE_MOCK_AI
-from app.routers import api, ws
-from app.services.csv_storage import ensure_csv_exists
+from app.config import settings
+from app.db.database import dispose_database, init_database
+from app.routers import api, auth, ws
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
 _STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
-app = FastAPI(title="Vocl", description="Audio-first technical interview simulator", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    await init_database()
+    logging.getLogger(__name__).info(
+        "Vocl started (AI=%s, DB=%s)",
+        "MOCK" if settings.USE_MOCK_AI else "LIVE",
+        settings.DATABASE_URL,
+    )
+    yield
+    await dispose_database()
+
+
+app = FastAPI(
+    title="Vocl",
+    description="Audio-first technical interview simulator",
+    version="0.2.0",
+    lifespan=lifespan,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -24,6 +43,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
 app.include_router(api.router)
 app.include_router(ws.router)
 
@@ -44,6 +64,3 @@ async def download_release_apk() -> FileResponse:
 
 
 app.mount("/", StaticFiles(directory=str(_STATIC_DIR), html=True), name="static")
-
-ensure_csv_exists()
-logging.getLogger(__name__).info("Vocl AI mode: %s", "MOCK" if USE_MOCK_AI else "LIVE")
