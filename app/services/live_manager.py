@@ -424,6 +424,7 @@ class LiveSessionManager(SessionBridge):
 
                 if content.input_transcription and content.input_transcription.text:
                     self.state.candidate_transcript.append(content.input_transcription.text)
+                    logger.info("Candidate transcript chunk: %r", content.input_transcription.text)
 
                 if content.model_turn and content.model_turn.parts:
                     for part in content.model_turn.parts:
@@ -452,6 +453,7 @@ class LiveSessionManager(SessionBridge):
                 continue
             self._tool_call_in_flight = True
             self._last_tool_call_timestamp = now
+            logger.info("Dispatching System 2 evaluate_approach: %r", (call.args or {}).get("user_approach_summary", ""))
             task = asyncio.create_task(self._execute_tool_call_async(ws, session, call))
             self._background_tasks.add(task)
             task.add_done_callback(self._background_tasks.discard)
