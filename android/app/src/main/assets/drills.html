@@ -286,7 +286,8 @@ function initDrills() {
       allProblems = Array.isArray(data) && data.length ? data : VOCL_FALLBACK_PROBLEMS.slice();
       renderDrills();
     })
-    .catch(function() {
+    .catch(function(err) {
+      if (err && err.status === 401) return;
       setOfflineBadge(true);
       allProblems = VOCL_FALLBACK_PROBLEMS.slice();
       renderDrills();

@@ -304,6 +304,10 @@ public class MainActivity extends AppCompatActivity {
                     return resp.body().string();
                 }
                 Log.w(TAG, "apiRequest " + method + " " + url + " -> HTTP " + resp.code());
+                if (resp.code() == 401) {
+                    AuthTokenStore.clear(MainActivity.this);
+                    return "__VOCL_HTTP_401__";
+                }
             } catch (Exception e) {
                 Log.e(TAG, "apiRequest " + method + " " + url + " failed: " + e.getMessage(), e);
             }

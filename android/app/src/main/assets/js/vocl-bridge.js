@@ -98,6 +98,16 @@ function isLocalFlavor() {
     return true;
 }
 
+function handleUnauthorizedSession() {
+    clearAuthToken();
+    if (window.location.href.indexOf('login.html') === -1) {
+        navigateTo('login.html');
+    }
+    var err = new Error('HTTP 401 Unauthorized');
+    err.status = 401;
+    return err;
+}
+
 function voclApiJson(path, method, payload) {
     var verb = method || 'GET';
     var jsonBody = payload !== undefined ? JSON.stringify(payload) : null;
@@ -106,6 +116,10 @@ function voclApiJson(path, method, payload) {
             setTimeout(function() {
                 try {
                     var body = window.VoclNative.apiRequestWithBody(verb, path, jsonBody);
+                    if (body === '__VOCL_HTTP_401__') {
+                        reject(handleUnauthorizedSession());
+                        return;
+                    }
                     if (body == null) {
                         reject(new Error('Native API request failed: ' + path));
                         return;
@@ -126,6 +140,7 @@ function voclApiJson(path, method, payload) {
         opts.body = jsonBody;
     }
     return fetch(getBackendUrl() + path, opts).then(function(res) {
+        if (res.status === 401) throw handleUnauthorizedSession();
         if (!res.ok) throw new Error('HTTP ' + res.status);
         return res.json();
     });

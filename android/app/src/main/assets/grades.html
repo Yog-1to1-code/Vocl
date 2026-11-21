@@ -842,7 +842,8 @@
               var list = Array.isArray(data) ? data : [];
               renderGrades(list);
             })
-            .catch(function () {
+            .catch(function (err) {
+              if (err && err.status === 401) return;
               setOfflineBadge(true);
               renderGrades(loadLocalSessions());
             });
