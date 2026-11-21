@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import audioop
 import logging
+import math
 import shutil
 import struct
 import sys
@@ -16,6 +17,30 @@ from app.config import DOWNSTREAM_SAMPLE_RATE, UPSTREAM_SAMPLE_RATE
 logger = logging.getLogger(__name__)
 
 DEFAULT_RECORDINGS_DIR = Path("data/recordings")
+_ACTIVE_SAMPLE_THRESHOLD = 120
+_FALLBACK_TARGET_RMS = 3500.0
+_MAX_USER_GAIN = 6.0
+
+
+def _active_rms(samples: array) -> float:
+    sq_sum = 0.0
+    count = 0
+    for s in samples:
+        if abs(s) > _ACTIVE_SAMPLE_THRESHOLD:
+            sq_sum += float(s) * float(s)
+            count += 1
+    return math.sqrt(sq_sum / count) if count > 0 else 0.0
+
+
+def _normalize_user_channel(left: array, right: array) -> array:
+    """Match user mic loudness to the AI channel with soft-clipping to prevent distortion."""
+    user_rms = _active_rms(left)
+    if user_rms <= 0.0:
+        return left
+    ai_rms = _active_rms(right)
+    target_rms = ai_rms if ai_rms > 500.0 else _FALLBACK_TARGET_RMS
+    gain = min(_MAX_USER_GAIN, max(1.5, target_rms / user_rms))
+    return array("h", (int(round(32767.0 * math.tanh((s * gain) / 32767.0))) for s in left))
 
 
 def _place_chunks(chunks: list[tuple[float, bytes]]) -> array:
@@ -71,6 +96,7 @@ class SessionAudioRecorder:
 
         left = _place_chunks(user_24k)
         right = _place_chunks(self._ai_chunks)
+        left = _normalize_user_channel(left, right)
         total = max(len(left), len(right))
         if len(left) < total:
             left.extend([0] * (total - len(left)))

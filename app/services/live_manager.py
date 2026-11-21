@@ -95,7 +95,13 @@ _SUBMIT_FINAL_GRADE_DECLARATION = types.FunctionDeclaration(
                 items=types.Schema(type=types.Type.STRING),
                 description="Up to 3 short phrases for missed edge cases.",
             ),
-            "summary_feedback": types.Schema(type=types.Type.STRING, description="2 crisp coaching sentences covering technical rigor and delivery."),
+            "summary_feedback": types.Schema(
+                type=types.Type.STRING,
+                description=(
+                    "2 crisp coaching sentences addressing the user directly in second-person "
+                    "('You...', 'Next time, try...'). Never use third-person ('The candidate...', 'They...')."
+                ),
+            ),
         },
         required=[
             "final_complexity",
@@ -263,6 +269,7 @@ class LiveSessionManager(SessionBridge):
         self._background_tasks: set[asyncio.Task] = set()
         self._tool_call_in_flight: bool = False
         self._last_tool_call_timestamp: float = 0.0
+        self._ai_turn_epoch: int = 0
         self._grading_final: bool = False
         self._final_grade_ready = asyncio.Event()
         self._recorder: SessionAudioRecorder | None = (
@@ -276,11 +283,12 @@ class LiveSessionManager(SessionBridge):
             tools=[types.Tool(function_declarations=[_EVALUATE_APPROACH_DECLARATION, _SUBMIT_FINAL_GRADE_DECLARATION])],
             input_audio_transcription=types.AudioTranscriptionConfig(),
             output_audio_transcription=types.AudioTranscriptionConfig(),
-            # 500ms VAD triggers immediate turn handoff without post-speech dead air
+            # Low start sensitivity prevents mic-floor phantom barge-ins; 700ms silence avoids mid-thought cutoffs
             realtime_input_config=types.RealtimeInputConfig(
                 automatic_activity_detection=types.AutomaticActivityDetection(
-                    silence_duration_ms=500,
+                    start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_LOW,
                     end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_HIGH,
+                    silence_duration_ms=700,
                 )
             ),
         )
@@ -429,6 +437,8 @@ class LiveSessionManager(SessionBridge):
                 if content.model_turn and content.model_turn.parts:
                     for part in content.model_turn.parts:
                         if part.inline_data and part.inline_data.data:
+                            if self.state.client_status != "speaking":
+                                self._ai_turn_epoch += 1
                             await self._update_client_status(ws, "speaking")
                             if self._recorder is not None:
                                 self._recorder.record_ai_pcm(part.inline_data.data)
@@ -453,8 +463,9 @@ class LiveSessionManager(SessionBridge):
                 continue
             self._tool_call_in_flight = True
             self._last_tool_call_timestamp = now
+            dispatch_epoch = self._ai_turn_epoch
             logger.info("Dispatching System 2 evaluate_approach: %r", (call.args or {}).get("user_approach_summary", ""))
-            task = asyncio.create_task(self._execute_tool_call_async(ws, session, call))
+            task = asyncio.create_task(self._execute_tool_call_async(ws, session, call, dispatch_epoch))
             self._background_tasks.add(task)
             task.add_done_callback(self._background_tasks.discard)
 
@@ -466,21 +477,24 @@ class LiveSessionManager(SessionBridge):
         except Exception:
             logger.warning("Malformed submit_final_grade args; falling back", exc_info=True)
 
-    async def _execute_tool_call_async(self, ws: WebSocket, session, call) -> None:
+    async def _execute_tool_call_async(self, ws: WebSocket, session, call, dispatch_epoch: int | None = None) -> None:
         try:
             summary = (call.args or {}).get("user_approach_summary", "")
             evaluation = await self._record_evaluation(ws, summary)
             if self._closed:
                 return
-            response_payload = (
-                SYSTEM2_TIMEOUT_RESPONSE
-                if is_timeout_evaluation(evaluation)
-                else evaluation.model_dump()
-            )
+            # Drop timed-out or stale tool responses so Gemini Live never aborts and restarts mid-sentence
+            timed_out = is_timeout_evaluation(evaluation)
+            ai_moved_on = (dispatch_epoch is not None and self._ai_turn_epoch != dispatch_epoch) or self.state.client_status == "speaking"
+            if timed_out or ai_moved_on:
+                reason = "timeout" if timed_out else "ai_already_speaking"
+                self._log_event("stale_tool_dropped", payload={"reason": reason, "call_id": call.id})
+                logger.info("Dropped late evaluate_approach response (%s) to avoid self-interruption", reason)
+                return
             resp_kwargs = {
                 "id": call.id,
                 "name": call.name,
-                "response": response_payload,
+                "response": evaluation.model_dump(),
             }
             if _TOOL_RESPONSE_SCHEDULING is not None:
                 resp_kwargs["scheduling"] = _TOOL_RESPONSE_SCHEDULING

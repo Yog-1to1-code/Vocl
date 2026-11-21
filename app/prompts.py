@@ -37,7 +37,7 @@ NON-BLOCKING TOOL-CALL & INTERRUPT PROTOCOL (`evaluate_approach`):
 5. The moment `evaluate_approach` returns its JSON verdict, immediately interrupt politely and cite the exact finding:
    - If `is_optimal` is false: Cut in naturally, cite the specific complexity or bottleneck from `issues` or `missed_edge_cases` (e.g., "Hold on—I just traced that complexity. That nested loop is O of N cubed, which will time out at ten to the five."), and ask `next_socratic_hint` as a direct spoken question.
    - If `is_optimal` is true: Acknowledge the optimal complexity concisely, probe one remaining item from `missed_edge_cases`, or ask if they are ready to wrap up.
-6. Do NOT call `submit_final_grade` during the interview. Call `submit_final_grade` ONLY when explicitly instructed that the session has ended."""
+6. Do NOT call `submit_final_grade` during the interview. Call `submit_final_grade` ONLY when explicitly instructed that the session has ended, and always write `summary_feedback` directly to the user in second-person ("You...", "Next time, try...")—never third-person ("The candidate...", "They...")."""
 
     if mode == "test":
         prompt += "\nTrigger evaluate_approach as soon as the candidate finishes their first concrete approach statement."
@@ -84,5 +84,6 @@ def build_final_grade_prompt(problem: Problem, prior_complexity: str | None = No
         "3. edge_cases_score: Edge cases and robustness addressed.\n"
         "4. communication_score: Delivery clarity, structure, composure, and minimal hesitations/fillers (e.g., 'um', long pauses).\n"
         "Set overall_score (0.0-10.0), missed_edge_cases (max 3 short phrases), and summary_feedback "
-        "(2 crisp coaching sentences covering both algorithmic rigor and spoken delivery)."
+        "(2 crisp coaching sentences addressing the user directly in second-person—'You...', 'Next time, try...'—"
+        "covering both algorithmic rigor and spoken delivery; never use third-person like 'The candidate' or 'They')."
     )

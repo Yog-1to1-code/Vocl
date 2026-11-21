@@ -316,12 +316,21 @@ def test_system2_fallback_on_malformed_json_or_timeout(monkeypatch):
         call.name = "evaluate_approach"
         call.args = {"user_approach_summary": "Slow approach"}
 
-        await manager._execute_tool_call_async(ws_mock, session_mock, call)
-        session_mock.send_tool_response.assert_awaited_once()
-        sent_responses = session_mock.send_tool_response.call_args.kwargs["function_responses"]
-        assert len(sent_responses) == 1
-        assert sent_responses[0].response == reasoning_engine.SYSTEM2_TIMEOUT_RESPONSE
-        assert sent_responses[0].response["status"] == "timeout"
+        await manager._execute_tool_call_async(ws_mock, session_mock, call, dispatch_epoch=0)
+        # Timed-out tool responses are dropped so Gemini Live never aborts mid-sentence
+        session_mock.send_tool_response.assert_not_awaited()
+        dropped = [e for e in manager.state.events if e["event_type"] == "stale_tool_dropped"]
+        assert len(dropped) == 1
+        assert dropped[0]["payload"]["reason"] == "timeout"
+
+        # 3. Late response after AI already started speaking a new turn is also dropped
+        monkeypatch.setattr(reasoning_engine, "USE_MOCK_AI", True)
+        manager._ai_turn_epoch = 2
+        await manager._execute_tool_call_async(ws_mock, session_mock, call, dispatch_epoch=1)
+        session_mock.send_tool_response.assert_not_awaited()
+        dropped = [e for e in manager.state.events if e["event_type"] == "stale_tool_dropped"]
+        assert len(dropped) == 2
+        assert dropped[1]["payload"]["reason"] == "ai_already_speaking"
 
     asyncio.run(_test())
 
