@@ -62,6 +62,11 @@
   .orb-stage.paused .orb-core { background: radial-gradient(circle at 50% 45%, #1E1E22 0%, #0C0C0E 100%); box-shadow: none; }
   .orb-stage.paused .bar { background: var(--muted); animation: none; transform: scaleY(0.35); }
 
+  .orb-stage.reconnecting .ring-outer { border-color: rgba(255, 159, 10, 0.30); animation: breathe 1.6s ease-in-out infinite; }
+  .orb-stage.reconnecting .ring-mid { border-color: rgba(255, 159, 10, 0.52); animation: breathe 1.6s ease-in-out infinite 0.25s; }
+  .orb-stage.reconnecting .orb-core { background: radial-gradient(circle at 50% 45%, #241908 0%, #100B03 100%); box-shadow: 0 0 36px rgba(255, 159, 10, 0.16); }
+  .orb-stage.reconnecting .bar { background: var(--amber); animation: waveListen 1.5s ease-in-out infinite; }
+
   .orb-stage.error .ring-outer { border-color: rgba(255, 69, 58, 0.28); }
   .orb-stage.error .ring-mid { border-color: rgba(255, 69, 58, 0.58); }
   .orb-stage.error .orb-core { background: radial-gradient(circle at 50% 45%, #2B0D0B 0%, #120504 100%); box-shadow: 0 0 42px rgba(255, 69, 58, 0.18); }
@@ -227,6 +232,11 @@ window.onVoclStateChange = function(status) {
     caption.textContent = 'CONNECTING';
     caption.style.color = '#9AB8FF';
     quote.textContent = '“Walk through your approach out loud before optimizing it.”';
+  } else if (status === 'reconnecting') {
+    stage.className = 'orb-stage reconnecting';
+    caption.textContent = 'RECONNECTING…';
+    caption.style.color = '#FF9F0A';
+    quote.textContent = '“Network hiccup — reconnecting your session…”';
   } else if (status === 'error') {
     stage.className = 'orb-stage error';
     caption.textContent = 'CONNECTION INTERRUPTED';

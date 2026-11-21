@@ -32,12 +32,13 @@ from app.services.reasoning_engine import (
     evaluate_candidate_approach,
     is_timeout_evaluation,
 )
-from app.services.session_recorder import SessionAudioRecorder
+from app.services.audio_recorder import SessionAudioRecorder
 
 logger = logging.getLogger(__name__)
 
 _UPSTREAM_MIME = f"audio/pcm;rate={UPSTREAM_SAMPLE_RATE}"
 _FINAL_TRANSCRIPT_CHARS = 1200
+RECONNECT_GRACE_SEC = 25.0
 
 _DOWNSTREAM_CHUNK_SEC = 0.1
 _DOWNSTREAM_CHUNK_BYTES = int(DOWNSTREAM_SAMPLE_RATE * _DOWNSTREAM_CHUNK_SEC) * 2
@@ -156,9 +157,31 @@ class SessionBridge:
         self.state = LiveSessionState(problem_id=problem_id)
         self._ws_write_lock = asyncio.Lock()
         self._closed = False
+        self._explicit_end = False
+        self._suspended = False
+        self._last_close_code: int | None = None
 
-    async def run(self, ws: WebSocket) -> Autopsy:
+    @property
+    def was_suspended(self) -> bool:
+        return self._suspended
+
+    async def run(self, ws: WebSocket, is_reconnect: bool = False) -> Autopsy | None:
         raise NotImplementedError
+
+    async def finalize(self, ws: WebSocket | None) -> Autopsy:
+        return await self._persist_and_send_autopsy(ws, self.state.evaluations)
+
+    async def send_session_started(self, ws: WebSocket, reconnected: bool = False) -> None:
+        payload: dict = {"type": "session_started", "session_id": self.state.session_id}
+        if reconnected:
+            payload["reconnected"] = True
+        await self._send_json(ws, payload, allow_when_closing=True)
+
+    def record_reconnect(self) -> None:
+        self._log_event("ws_reconnect", payload={"previous_close_code": self._last_close_code})
+
+    def _should_suspend_on_disconnect(self) -> bool:
+        return (not self._explicit_end) and bool(self.user_id) and RECONNECT_GRACE_SEC > 0
 
     def _log_event(self, event_type: str, latency_ms: float | None = None, payload: dict | None = None) -> None:
         self.state.events.append({
@@ -190,9 +213,16 @@ class SessionBridge:
         await self._send_json(ws, {"type": "tool_result", **evaluation.model_dump()})
         return evaluation
 
-    async def _persist_and_send_autopsy(self, ws: WebSocket, evaluations: list[Evaluation]) -> Autopsy:
+    async def _persist_and_send_autopsy(self, ws: WebSocket | None, evaluations: list[Evaluation]) -> Autopsy:
         autopsy = summarize_evaluations(self.state, evaluations)
-        self._log_event("ws_close", payload={"duration_sec": autopsy.duration_sec, "grading_source": autopsy.grading_source})
+        self._log_event(
+            "ws_close",
+            payload={
+                "duration_sec": autopsy.duration_sec,
+                "grading_source": autopsy.grading_source,
+                "close_code": self._last_close_code if self._last_close_code is not None else 1000,
+            },
+        )
         if self.user_id:
             await record_session_and_increment_quota(
                 self.user_id,
@@ -200,7 +230,8 @@ class SessionBridge:
                 audio_path=self.state.audio_path,
                 events=self.state.events,
             )
-        await self._send_json(ws, {"type": "autopsy", **autopsy.model_dump()}, allow_when_closing=True)
+        if ws is not None:
+            await self._send_json(ws, {"type": "autopsy", **autopsy.model_dump()}, allow_when_closing=True)
         return autopsy
 
     async def _send_json(self, ws: WebSocket, payload: dict, allow_when_closing: bool = False) -> None:
@@ -254,17 +285,31 @@ class LiveSessionManager(SessionBridge):
             ),
         )
 
-    async def run(self, ws: WebSocket) -> Autopsy:
+    def _build_resume_prompt(self) -> str:
+        transcript = "".join(self.state.candidate_transcript)[-_FINAL_TRANSCRIPT_CHARS:].strip()
+        if transcript:
+            return f"The candidate's audio briefly reconnected. Resume naturally from where they left off. Prior transcript excerpt: {transcript}"
+        return "The candidate's audio briefly reconnected. Briefly welcome them back and ask them to continue."
+
+    async def run(self, ws: WebSocket, is_reconnect: bool = False) -> Autopsy | None:
+        self._closed = False
+        self._suspended = False
+        if is_reconnect:
+            self.state.client_status = "listening"
+            await self._send_json(ws, {"type": "status", "status": "listening", "reconnected": True})
+
+        remaining_sec = max(5.0, SESSION_MAX_DURATION_SEC - (time.time() - self.state.start_time))
         try:
             async with gemini_client().aio.live.connect(model=GEMINI_LIVE_MODEL, config=self._build_live_config()) as session:
+                prompt_text = self._build_resume_prompt() if is_reconnect else "Begin the interview."
                 await session.send_client_content(
-                    turns=types.Content(role="user", parts=[types.Part(text="Begin the interview.")]),
+                    turns=types.Content(role="user", parts=[types.Part(text=prompt_text)]),
                     turn_complete=True,
                 )
                 tasks = [
                     asyncio.create_task(self._relay_client_to_gemini(ws, session)),
                     asyncio.create_task(self._relay_gemini_to_client(ws, session)),
-                    asyncio.create_task(asyncio.sleep(SESSION_MAX_DURATION_SEC)),
+                    asyncio.create_task(asyncio.sleep(remaining_sec)),
                 ]
                 try:
                     done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
@@ -285,9 +330,14 @@ class LiveSessionManager(SessionBridge):
             logger.exception("Gemini Live session error")
             await self._send_json(ws, {"type": "error", "message": "Live session unavailable"}, allow_when_closing=True)
 
-        if self._recorder is not None:
+        if self._suspended:
+            return None
+        return await self.finalize(ws)
+
+    async def finalize(self, ws: WebSocket | None) -> Autopsy:
+        if self._recorder is not None and self.state.audio_path is None:
             try:
-                saved = self._recorder.save_stereo_wav()
+                saved = await self._recorder.save_recording()
                 if saved is not None:
                     self.state.audio_path = str(saved)
             except Exception:
@@ -329,6 +379,9 @@ class LiveSessionManager(SessionBridge):
         while True:
             message = await ws.receive()
             if message["type"] == "websocket.disconnect":
+                self._last_close_code = int(message.get("code") or 1006)
+                if self._should_suspend_on_disconnect():
+                    self._suspended = True
                 return
             if message.get("bytes"):
                 if self._grading_final:
@@ -342,6 +395,8 @@ class LiveSessionManager(SessionBridge):
                     self._recorder.record_user_pcm(raw_pcm)
                 await session.send_realtime_input(audio=types.Blob(data=raw_pcm, mime_type=_UPSTREAM_MIME))
             elif message.get("text") and _parse_control_type(message["text"]) == "end_session":
+                self._explicit_end = True
+                self._last_close_code = 1000
                 await self._request_final_live_grade(session)
                 return
 
@@ -448,27 +503,43 @@ class MockLiveSessionManager(SessionBridge):
         self._tool_call_in_flight: bool = False
         self._last_tool_call_timestamp: float = 0.0
 
-    async def run(self, ws: WebSocket) -> Autopsy:
-        self._turn_task = asyncio.create_task(self._speak(ws, GREETING_CHIME_PCM))
+    async def run(self, ws: WebSocket, is_reconnect: bool = False) -> Autopsy | None:
+        self._closed = False
+        self._suspended = False
+        if is_reconnect:
+            self.state.client_status = "listening"
+            await self._send_json(ws, {"type": "status", "status": "listening", "reconnected": True})
+        else:
+            self._turn_task = asyncio.create_task(self._speak(ws, GREETING_CHIME_PCM))
+
+        remaining_sec = max(1.0, SESSION_MAX_DURATION_SEC - (time.time() - self.state.start_time))
         try:
-            await asyncio.wait_for(self._relay_client_frames(ws), timeout=SESSION_MAX_DURATION_SEC)
+            await asyncio.wait_for(self._relay_client_frames(ws), timeout=remaining_sec)
         except asyncio.TimeoutError:
+            self._explicit_end = True
             logger.info("Mock session %s hit the %ds cap", self.state.session_id, SESSION_MAX_DURATION_SEC)
         finally:
             self._closed = True
             await self._cancel_active_turn()
-        return await self._persist_and_send_autopsy(ws, self.state.evaluations)
+        if self._suspended:
+            return None
+        return await self.finalize(ws)
 
     async def _relay_client_frames(self, ws: WebSocket) -> None:
         while True:
             message = await ws.receive()
             if message["type"] == "websocket.disconnect":
+                self._last_close_code = int(message.get("code") or 1006)
+                if self._should_suspend_on_disconnect():
+                    self._suspended = True
                 return
             if message.get("bytes"):
                 self._accumulate_candidate_audio(ws, len(message["bytes"]))
                 continue
             control_type = _parse_control_type(message.get("text") or "")
             if control_type == "end_session":
+                self._explicit_end = True
+                self._last_close_code = 1000
                 return
             if control_type == "simulate_barge_in":
                 await self._simulate_barge_in(ws)
@@ -536,6 +607,65 @@ class MockLiveSessionManager(SessionBridge):
                 bg.cancel()
         if self._background_tasks:
             await asyncio.gather(*self._background_tasks, return_exceptions=True)
+
+
+@dataclass
+class SuspendedSession:
+    bridge: SessionBridge
+    user_id: str
+    problem_id: str
+    grace_task: asyncio.Task
+
+
+_SUSPENDED_SESSIONS: dict[str, SuspendedSession] = {}
+
+
+async def _finalize_after_grace(session_id: str) -> None:
+    try:
+        await asyncio.sleep(RECONNECT_GRACE_SEC)
+    except asyncio.CancelledError:
+        return
+    entry = _SUSPENDED_SESSIONS.pop(session_id, None)
+    if entry is None:
+        return
+    try:
+        autopsy = await entry.bridge.finalize(None)
+        logger.info("Grace window expired; finalized session %s (score=%.1f)", autopsy.session_id, autopsy.score)
+    except Exception:
+        logger.exception("Failed to finalize expired suspended session %s", session_id)
+
+
+def suspend_session(bridge: SessionBridge) -> None:
+    """Park a disconnected session for RECONNECT_GRACE_SEC before finalizing and grading."""
+    if not bridge.user_id:
+        return
+    session_id = bridge.state.session_id
+    existing = _SUSPENDED_SESSIONS.pop(session_id, None)
+    if existing is not None:
+        existing.grace_task.cancel()
+    task = asyncio.create_task(_finalize_after_grace(session_id))
+    _SUSPENDED_SESSIONS[session_id] = SuspendedSession(
+        bridge=bridge,
+        user_id=bridge.user_id,
+        problem_id=bridge.state.problem_id,
+        grace_task=task,
+    )
+
+
+def claim_suspended_session(session_id: str, user_id: str, problem_id: str) -> SessionBridge | None:
+    """Re-claim a suspended session when the same user reconnects within the grace window."""
+    entry = _SUSPENDED_SESSIONS.get(session_id)
+    if entry is None or entry.user_id != user_id or entry.problem_id != problem_id:
+        return None
+    _SUSPENDED_SESSIONS.pop(session_id, None)
+    entry.grace_task.cancel()
+    return entry.bridge
+
+
+def clear_suspended_sessions() -> None:
+    for entry in list(_SUSPENDED_SESSIONS.values()):
+        entry.grace_task.cancel()
+    _SUSPENDED_SESSIONS.clear()
 
 
 def create_session_bridge(problem_id: str, user_id: str | None = None) -> SessionBridge:

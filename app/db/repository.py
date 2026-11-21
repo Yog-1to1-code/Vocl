@@ -217,3 +217,65 @@ async def list_session_events(session_id: str) -> list[SessionEventRecord]:
                 )
             ).all()
         )
+
+
+async def get_user_session(user_id: str, session_id: str) -> SessionRecord | None:
+    factory = get_session_factory()
+    async with factory() as db:
+        return await db.scalar(
+            select(SessionRecord).where(
+                SessionRecord.id == session_id,
+                SessionRecord.user_id == user_id,
+            )
+        )
+
+
+def _percentile(sorted_values: list[float], pct: float) -> float | None:
+    if not sorted_values:
+        return None
+    if len(sorted_values) == 1:
+        return round(sorted_values[0], 2)
+    rank = (pct / 100.0) * (len(sorted_values) - 1)
+    lo = int(rank)
+    hi = min(lo + 1, len(sorted_values) - 1)
+    frac = rank - lo
+    return round(sorted_values[lo] + (sorted_values[hi] - sorted_values[lo]) * frac, 2)
+
+
+async def get_user_metrics_summary(user_id: str) -> dict:
+    """Compute session count, reconnect count, and p50/p95 latencies for a user."""
+    factory = get_session_factory()
+    async with factory() as db:
+        session_count = int(
+            await db.scalar(
+                select(func.count()).select_from(SessionRecord).where(SessionRecord.user_id == user_id)
+            )
+            or 0
+        )
+        events = (
+            await db.scalars(
+                select(SessionEventRecord)
+                .join(SessionRecord, SessionEventRecord.session_id == SessionRecord.id)
+                .where(SessionRecord.user_id == user_id)
+            )
+        ).all()
+
+    total_reconnects = sum(1 for ev in events if ev.event_type == "ws_reconnect")
+    tool_latencies = sorted(
+        float(ev.latency_ms)
+        for ev in events
+        if ev.event_type == "tool_result" and ev.latency_ms is not None
+    )
+    grade_latencies = sorted(
+        float(ev.latency_ms)
+        for ev in events
+        if ev.event_type == "final_grade" and ev.latency_ms is not None
+    )
+    return {
+        "session_count": session_count,
+        "total_reconnects": total_reconnects,
+        "tool_result_p50_ms": _percentile(tool_latencies, 50.0),
+        "tool_result_p95_ms": _percentile(tool_latencies, 95.0),
+        "final_grade_p50_ms": _percentile(grade_latencies, 50.0),
+        "final_grade_p95_ms": _percentile(grade_latencies, 95.0),
+    }

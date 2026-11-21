@@ -19,9 +19,12 @@ import androidx.core.content.ContextCompat;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -57,9 +60,17 @@ public class VoclAudioService extends Service {
     private WebSocket webSocket;
     private Thread captureThread;
     private ExecutorService shutdownExecutor;
+    private ScheduledExecutorService reconnectScheduler;
     private volatile boolean isRunning;
+    private volatile String activeProblemId;
+    private volatile String activeSessionId;
+    private volatile int reconnectAttempt = 0;
+    private final AtomicBoolean userInitiatedStop = new AtomicBoolean(false);
     private final AtomicBoolean isEnding = new AtomicBoolean(false);
     private final AtomicBoolean isCleanedUp = new AtomicBoolean(false);
+
+    private static final int MAX_RECONNECT_ATTEMPTS = 3;
+    private static final long[] RECONNECT_BACKOFF_MS = {1000L, 2000L, 4000L};
 
     private CountDownLatch autopsyLatch;
 
@@ -103,6 +114,7 @@ public class VoclAudioService extends Service {
                 .build();
         audioEngine = new AudioStreamEngine();
         shutdownExecutor = Executors.newSingleThreadExecutor();
+        reconnectScheduler = Executors.newSingleThreadScheduledExecutor();
     }
 
     @Override
@@ -153,11 +165,15 @@ public class VoclAudioService extends Service {
             captureThread = null;
         }
 
+        userInitiatedStop.set(false);
         isEnding.set(false);
         isCleanedUp.set(false);
         isRunning = true;
         sessionActive = true;
         micMuted = false;
+        activeProblemId = problemId;
+        activeSessionId = null;
+        reconnectAttempt = 0;
         currentStatus = "connecting";
         lastAutopsyJson = null;
         autopsyLatch = new CountDownLatch(1);
@@ -166,7 +182,14 @@ public class VoclAudioService extends Service {
         audioEngine.initPlayback();
         audioEngine.startPlayback();
 
+        openWebSocket(problemId, null);
+    }
+
+    private void openWebSocket(String problemId, @Nullable String sessionId) {
         String wsUrl = BackendConfig.BASE_WS_URL + "/ws/interview/" + problemId;
+        if (sessionId != null && !sessionId.isEmpty()) {
+            wsUrl += "?session_id=" + URLEncoder.encode(sessionId, StandardCharsets.UTF_8);
+        }
         Request.Builder requestBuilder = new Request.Builder().url(wsUrl);
         String token = AuthTokenStore.get(this);
         if (token != null) {
@@ -177,7 +200,9 @@ public class VoclAudioService extends Service {
         webSocket = httpClient.newWebSocket(request, new WebSocketListener() {
             @Override
             public void onOpen(WebSocket ws, Response response) {
-                Log.i(TAG, "WebSocket connected");
+                Log.i(TAG, "WebSocket connected (reconnectAttempt=" + reconnectAttempt + ")");
+                reconnectAttempt = 0;
+                isRunning = true;
                 audioEngine.startCapture();
                 startCaptureLoop(ws);
                 broadcastState("listening");
@@ -197,8 +222,12 @@ public class VoclAudioService extends Service {
 
             @Override
             public void onFailure(WebSocket ws, Throwable t, @Nullable Response response) {
+                if (ws != webSocket) return;
                 String respInfo = response != null ? (" [HTTP " + response.code() + "]") : "";
                 Log.e(TAG, "WebSocket failure" + respInfo + ": " + t.getClass().getName() + ": " + t.getMessage(), t);
+                if (!userInitiatedStop.get() && !isEnding.get() && scheduleReconnect()) {
+                    return;
+                }
                 if (autopsyLatch != null) autopsyLatch.countDown();
                 broadcastState("error");
                 cleanupSession();
@@ -206,11 +235,47 @@ public class VoclAudioService extends Service {
 
             @Override
             public void onClosed(WebSocket ws, int code, String reason) {
-                Log.i(TAG, "WebSocket closed: " + reason);
+                if (ws != webSocket) return;
+                Log.i(TAG, "WebSocket closed (" + code + "): " + reason);
+                boolean terminalCode = (code == 1000 || code == 4401 || code == 4429);
+                if (!userInitiatedStop.get() && !isEnding.get() && !terminalCode && scheduleReconnect()) {
+                    return;
+                }
                 if (autopsyLatch != null) autopsyLatch.countDown();
+                if (!userInitiatedStop.get() && !isEnding.get() && code != 1000) {
+                    broadcastState("error");
+                }
                 cleanupSession();
             }
         });
+    }
+
+    private boolean scheduleReconnect() {
+        if (reconnectAttempt >= MAX_RECONNECT_ATTEMPTS
+                || userInitiatedStop.get()
+                || isEnding.get()
+                || activeProblemId == null
+                || reconnectScheduler == null
+                || reconnectScheduler.isShutdown()) {
+            return false;
+        }
+        isRunning = false;
+        if (captureThread != null) {
+            captureThread.interrupt();
+            captureThread = null;
+        }
+        long delayMs = RECONNECT_BACKOFF_MS[reconnectAttempt];
+        reconnectAttempt++;
+        Log.i(TAG, "Scheduling WebSocket reconnect attempt " + reconnectAttempt + "/" + MAX_RECONNECT_ATTEMPTS + " in " + delayMs + "ms");
+        broadcastState("reconnecting");
+        String targetProblem = activeProblemId;
+        String targetSession = activeSessionId;
+        reconnectScheduler.schedule(() -> {
+            if (!userInitiatedStop.get() && !isEnding.get()) {
+                openWebSocket(targetProblem, targetSession);
+            }
+        }, delayMs, TimeUnit.MILLISECONDS);
+        return true;
     }
 
     private void startCaptureLoop(WebSocket ws) {
@@ -276,10 +341,17 @@ public class VoclAudioService extends Service {
             String type = msg.optString("type", "");
 
             switch (type) {
+                case "session_started":
+                    String sid = msg.optString("session_id", "");
+                    if (!sid.isEmpty()) {
+                        activeSessionId = sid;
+                    }
+                    break;
                 case "clear_audio_buffer":
                     audioEngine.flushPlayback();
                     break;
                 case "state":
+                case "status":
                     broadcastState(msg.optString("status", "listening"));
                     break;
                 case "autopsy":
@@ -299,6 +371,7 @@ public class VoclAudioService extends Service {
     }
 
     private void endSessionAsync() {
+        userInitiatedStop.set(true);
         if (!isEnding.compareAndSet(false, true)) return;
         isRunning = false;
         if (captureThread != null) {
@@ -399,6 +472,7 @@ public class VoclAudioService extends Service {
 
     @Override
     public void onDestroy() {
+        userInitiatedStop.set(true);
         isRunning = false;
         sessionActive = false;
         if (webSocket != null) {
@@ -408,6 +482,9 @@ public class VoclAudioService extends Service {
         releaseWakeLock();
         if (shutdownExecutor != null) {
             shutdownExecutor.shutdownNow();
+        }
+        if (reconnectScheduler != null) {
+            reconnectScheduler.shutdownNow();
         }
         super.onDestroy();
     }
