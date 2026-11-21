@@ -18,12 +18,25 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.credentials.Credential;
+import androidx.credentials.CredentialManager;
+import androidx.credentials.CredentialManagerCallback;
+import androidx.credentials.CustomCredential;
+import androidx.credentials.GetCredentialRequest;
+import androidx.credentials.GetCredentialResponse;
+import androidx.credentials.exceptions.GetCredentialCancellationException;
+import androidx.credentials.exceptions.GetCredentialException;
 
 import android.util.Base64;
 import android.util.Log;
 
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption;
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
+
 import org.json.JSONObject;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import okhttp3.MediaType;
@@ -38,6 +51,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int PERMISSION_REQUEST_CODE = 100;
     private WebView webView;
     private String deliveredAutopsyJson;
+    private final ExecutorService authExecutor = Executors.newSingleThreadExecutor();
     private final OkHttpClient apiClient = new OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
@@ -200,6 +214,61 @@ public class MainActivity extends AppCompatActivity {
                 "window.onVoclSessionComplete && window.onVoclSessionComplete(JSON.parse(" + quotedJson + "))", null));
     }
 
+    private void pushGoogleSignInSuccess() {
+        runOnUiThread(() -> webView.evaluateJavascript(
+                "window.onVoclGoogleSignInSuccess && window.onVoclGoogleSignInSuccess()", null));
+    }
+
+    private void pushGoogleSignInError(String message) {
+        String quoted = JSONObject.quote(message != null ? message : "Google Sign-In failed");
+        runOnUiThread(() -> webView.evaluateJavascript(
+                "window.onVoclGoogleSignInError && window.onVoclGoogleSignInError(" + quoted + ")", null));
+    }
+
+    private void exchangeGoogleIdToken(String idToken) {
+        authExecutor.execute(() -> {
+            String url = BackendConfig.BASE_HTTP_URL + "/api/auth/google";
+            try {
+                JSONObject payload = new JSONObject();
+                payload.put("id_token", idToken);
+                RequestBody body = RequestBody.create(
+                        payload.toString(),
+                        MediaType.parse("application/json; charset=utf-8"));
+                Request req = new Request.Builder().url(url).post(body).build();
+                try (Response resp = apiClient.newCall(req).execute()) {
+                    String raw = resp.body() != null ? resp.body().string() : "{}";
+                    if (resp.isSuccessful()) {
+                        JSONObject data = new JSONObject(raw);
+                        String accessToken = data.optString("access_token", "");
+                        if (!accessToken.isEmpty()) {
+                            AuthTokenStore.save(MainActivity.this, accessToken);
+                            pushGoogleSignInSuccess();
+                            return;
+                        }
+                        pushGoogleSignInError("Server returned an empty access token");
+                        return;
+                    }
+                    String detail = "Google login failed (HTTP " + resp.code() + ")";
+                    try {
+                        String serverDetail = new JSONObject(raw).optString("detail", "");
+                        if (!serverDetail.isEmpty()) detail = serverDetail;
+                    } catch (Exception ignored) {}
+                    Log.w(TAG, "POST /api/auth/google -> HTTP " + resp.code() + ": " + detail);
+                    pushGoogleSignInError(detail);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Google token exchange failed: " + e.getMessage(), e);
+                pushGoogleSignInError("Unable to reach Vocl server");
+            }
+        });
+    }
+
+    @Override
+    protected void onDestroy() {
+        authExecutor.shutdownNow();
+        super.onDestroy();
+    }
+
     @Override
     public void onBackPressed() {
         String currentUrl = webView.getUrl();
@@ -312,6 +381,66 @@ public class MainActivity extends AppCompatActivity {
                 Log.e(TAG, "apiRequest " + method + " " + url + " failed: " + e.getMessage(), e);
             }
             return null;
+        }
+
+        @JavascriptInterface
+        public void startGoogleSignIn(String webClientId) {
+            if (webClientId == null || webClientId.trim().isEmpty()) {
+                pushGoogleSignInError("Google Sign-In is not configured on this server");
+                return;
+            }
+            runOnUiThread(() -> {
+                GetGoogleIdOption googleIdOption = new GetGoogleIdOption.Builder()
+                        .setFilterByAuthorizedAccounts(false)
+                        .setServerClientId(webClientId.trim())
+                        .setAutoSelectEnabled(false)
+                        .build();
+
+                GetCredentialRequest request = new GetCredentialRequest.Builder()
+                        .addCredentialOption(googleIdOption)
+                        .build();
+
+                CredentialManager credentialManager = CredentialManager.create(MainActivity.this);
+                credentialManager.getCredentialAsync(
+                        MainActivity.this,
+                        request,
+                        null,
+                        ContextCompat.getMainExecutor(MainActivity.this),
+                        new CredentialManagerCallback<GetCredentialResponse, GetCredentialException>() {
+                            @Override
+                            public void onResult(GetCredentialResponse result) {
+                                Credential credential = result.getCredential();
+                                if (credential instanceof CustomCredential
+                                        && GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL.equals(credential.getType())) {
+                                    try {
+                                        GoogleIdTokenCredential googleCred =
+                                                GoogleIdTokenCredential.createFrom(credential.getData());
+                                        exchangeGoogleIdToken(googleCred.getIdToken());
+                                    } catch (Exception e) {
+                                        Log.e(TAG, "Invalid Google ID token credential", e);
+                                        pushGoogleSignInError("Invalid Google credential received");
+                                    }
+                                } else {
+                                    Log.e(TAG, "Unexpected credential type: " + credential.getType());
+                                    pushGoogleSignInError("Unsupported Google credential type");
+                                }
+                            }
+
+                            @Override
+                            public void onError(@NonNull GetCredentialException e) {
+                                Log.e(TAG, "Google CredentialManager failed: " + e.getClass().getSimpleName() + ": " + e.getMessage(), e);
+                                if (e instanceof GetCredentialCancellationException) {
+                                    pushGoogleSignInError("Sign-in cancelled");
+                                } else {
+                                    String msg = e.getMessage() != null && !e.getMessage().isEmpty()
+                                            ? e.getMessage()
+                                            : "Google Sign-In failed";
+                                    pushGoogleSignInError(msg);
+                                }
+                            }
+                        }
+                );
+            });
         }
 
         // Fetch authenticated session audio bytes as a base64 data URI for WebView <audio> playback

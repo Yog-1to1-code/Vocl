@@ -9,7 +9,7 @@
   .login-page {
     max-width: 440px; min-height: 100dvh; margin: 0 auto;
     padding: 36px 24px calc(32px + env(safe-area-inset-bottom, 0px));
-    display: flex; flex-direction: column; justify-content: space-between; gap: 24px;
+    display: flex; flex-direction: column; justify-content: space-between; gap: 22px;
   }
   .hero { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
   .logo-badge {
@@ -19,6 +19,32 @@
   .headline { font-size: 32px; font-weight: 700; line-height: 1.08; letter-spacing: -0.035em; }
   .headline span { color: var(--green); }
   .subtitle { font-size: 14.5px; color: var(--muted); line-height: 1.48; }
+
+  .auth-stack { display: flex; flex-direction: column; gap: 16px; width: 100%; }
+
+  .btn-google {
+    width: 100%; height: 52px; border-radius: 14px; border: 1px solid #303036;
+    background: #FFFFFF; color: #000000; font-size: 15.5px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer;
+    transition: transform 0.15s ease, opacity 0.15s ease;
+  }
+  .btn-google:active { transform: scale(0.985); }
+  .btn-google:disabled { opacity: 0.55; }
+
+  .inline-error {
+    display: none; padding: 11px 14px; border-radius: 12px;
+    background: rgba(255, 69, 58, 0.12); border: 1px solid rgba(255, 69, 58, 0.36);
+    color: #FF6961; font-size: 13px; line-height: 1.4;
+  }
+  .inline-error.visible { display: block; }
+
+  .or-divider {
+    display: flex; align-items: center; gap: 12px;
+    color: #6E6E73; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .or-divider::before, .or-divider::after {
+    content: ""; flex: 1; height: 1px; background: var(--surface-border);
+  }
 
   .auth-card {
     background: var(--surface); border: 1px solid var(--surface-border); border-radius: 20px;
@@ -34,28 +60,16 @@
 
   .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 2px; }
   .btn-primary {
-    height: 48px; border-radius: 14px; border: none;
-    background: var(--green); color: #000000; font-size: 15px; font-weight: 700; cursor: pointer;
+    height: 46px; border-radius: 14px; border: none;
+    background: var(--green); color: #000000; font-size: 14.5px; font-weight: 700; cursor: pointer;
   }
   .btn-secondary {
-    height: 48px; border-radius: 14px; border: 1px solid var(--surface-border);
-    background: #18181C; color: #FFFFFF; font-size: 15px; font-weight: 600; cursor: pointer;
+    height: 46px; border-radius: 14px; border: 1px solid var(--surface-border);
+    background: #18181C; color: #FFFFFF; font-size: 14.5px; font-weight: 600; cursor: pointer;
   }
   .btn-primary:disabled, .btn-secondary:disabled { opacity: 0.5; }
 
-  .actions { display: flex; flex-direction: column; gap: 10px; width: 100%; }
-  .btn-google {
-    width: 100%; height: 50px; border-radius: 14px; border: 1px solid #303036;
-    background: #FFFFFF; color: #000000; font-size: 15px; font-weight: 700;
-    display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer;
-  }
-  .btn-dev {
-    width: 100%; height: 50px; border-radius: 14px; border: 1px solid rgba(40, 215, 99, 0.45);
-    background: rgba(40, 215, 99, 0.10); color: var(--green);
-    font-size: 15px; font-weight: 700; cursor: pointer;
-  }
-  .btn-dev:disabled, .btn-google:disabled { opacity: 0.5; }
-  .quota-note { text-align: center; font-size: 12px; color: #6E6E73; margin-top: 4px; }
+  .quota-note { text-align: center; font-size: 12px; color: #6E6E73; }
 </style>
 <script src="js/vocl-bridge.js"></script>
 </head>
@@ -70,78 +84,130 @@
     </p>
   </section>
 
-  <section class="auth-card" id="supabase-form-card">
-    <span class="card-label mono">EMAIL SIGN IN</span>
-    <div class="field">
-      <label for="email-input">Email</label>
-      <input id="email-input" type="email" autocomplete="email" placeholder="you@example.com">
-    </div>
-    <div class="field">
-      <label for="password-input">Password</label>
-      <input id="password-input" type="password" autocomplete="current-password" placeholder="At least 6 characters">
-    </div>
-    <div class="btn-row">
-      <button type="button" class="btn-primary" id="signin-btn" onclick="submitSupabaseAuth('signin')">Sign In</button>
-      <button type="button" class="btn-secondary" id="signup-btn" onclick="submitSupabaseAuth('signup')">Sign Up</button>
-    </div>
-  </section>
-
-  <section class="actions">
+  <section class="auth-stack">
     <button type="button" class="btn-google" id="google-btn" onclick="signInWithGoogle()">
       <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.7-2.4 3.6v3h3.9c2.3-2.1 3.5-5.2 3.5-8.8z"/><path fill="#34A853" d="M12 24c3.2 0 6-1.1 8-3l-3.9-3c-1.1.7-2.5 1.2-4.1 1.2-3.2 0-5.9-2.1-6.8-5H1.2v3.1C3.2 21.3 7.3 24 12 24z"/><path fill="#FBBC05" d="M5.2 14.2c-.2-.7-.4-1.4-.4-2.2s.1-1.5.4-2.2V6.7H1.2C.4 8.3 0 10.1 0 12s.4 3.7 1.2 5.3l4-3.1z"/><path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4C18 1.2 15.2 0 12 0 7.3 0 3.2 2.7 1.2 6.7l4 3.1c.9-2.9 3.6-5 6.8-5z"/></svg>
-      Continue with Google
+      <span id="google-btn-label">Continue with Google</span>
     </button>
 
-    <button type="button" class="btn-dev" id="dev-btn" onclick="signInAsLocalDev()">
-      Continue as Local Dev
-    </button>
+    <div class="inline-error" id="auth-error" role="alert"></div>
 
-    <p class="quota-note mono">Pocket Mode &bull; 15 min/day free voice quota</p>
+    <div class="or-divider" id="or-divider">or</div>
+
+    <section class="auth-card" id="supabase-form-card">
+      <span class="card-label mono">EMAIL SIGN IN</span>
+      <div class="field">
+        <label for="email-input">Email</label>
+        <input id="email-input" type="email" autocomplete="email" placeholder="you@example.com">
+      </div>
+      <div class="field">
+        <label for="password-input">Password</label>
+        <input id="password-input" type="password" autocomplete="current-password" placeholder="At least 6 characters">
+      </div>
+      <div class="btn-row">
+        <button type="button" class="btn-primary" id="signin-btn" onclick="submitSupabaseAuth('signin')">Sign In</button>
+        <button type="button" class="btn-secondary" id="signup-btn" onclick="submitSupabaseAuth('signup')">Sign Up</button>
+      </div>
+    </section>
   </section>
+
+  <p class="quota-note mono">Pocket Mode &bull; 15 min/day free voice quota</p>
 </main>
 
 <script>
-var authConfig = { supabase_url: '', supabase_key: '', dev_auth_bypass: true };
+var authConfig = { supabase_url: '', supabase_key: '', google_client_id: '' };
+
+function showAuthError(msg) {
+  var box = document.getElementById('auth-error');
+  if (!msg) {
+    box.textContent = '';
+    box.classList.remove('visible');
+    return;
+  }
+  box.textContent = msg;
+  box.classList.add('visible');
+}
+
+function setGoogleButtonLoading(loading) {
+  var btn = document.getElementById('google-btn');
+  var label = document.getElementById('google-btn-label');
+  btn.disabled = loading;
+  label.textContent = loading ? 'Signing in with Google…' : 'Continue with Google';
+}
+
+function setEmailButtonsDisabled(disabled) {
+  document.getElementById('signin-btn').disabled = disabled;
+  document.getElementById('signup-btn').disabled = disabled;
+}
+
+function loadAuthConfig() {
+  return voclApiJson('/api/auth/config').then(function(cfg) {
+    authConfig = cfg || authConfig;
+    var hasEmail = Boolean(authConfig.supabase_url && authConfig.supabase_key);
+    document.getElementById('supabase-form-card').style.display = hasEmail ? 'flex' : 'none';
+    document.getElementById('or-divider').style.display = hasEmail ? 'flex' : 'none';
+    return authConfig;
+  });
+}
 
 (function initLogin() {
   if (getAuthToken()) {
     navigateTo('drills.html');
     return;
   }
-  voclApiJson('/api/auth/config')
-    .then(function(cfg) {
-      authConfig = cfg || authConfig;
-      var showDev = Boolean(authConfig.dev_auth_bypass) && (!window.VoclNative || isLocalFlavor());
-      document.getElementById('dev-btn').style.display = showDev ? 'block' : 'none';
-      if (!authConfig.supabase_url || !authConfig.supabase_key) {
-        document.getElementById('supabase-form-card').style.display = 'none';
-      }
-    })
-    .catch(function() {
-      if (window.VoclNative && !isLocalFlavor()) {
-        document.getElementById('dev-btn').style.display = 'none';
-      }
-    });
+  loadAuthConfig().catch(function() {});
 })();
 
-function setAuthButtonsDisabled(disabled) {
-  document.getElementById('signin-btn').disabled = disabled;
-  document.getElementById('signup-btn').disabled = disabled;
+window.onVoclGoogleSignInSuccess = function() {
+  showAuthError('');
+  setGoogleButtonLoading(false);
+  navigateTo('drills.html');
+};
+
+window.onVoclGoogleSignInError = function(message) {
+  setGoogleButtonLoading(false);
+  showAuthError(message || 'Google Sign-In failed. Please try again.');
+};
+
+function signInWithGoogle() {
+  showAuthError('');
+  if (!window.VoclNative || typeof window.VoclNative.startGoogleSignIn !== 'function') {
+    showAuthError('Native Google Sign-In is only available inside the Vocl Android app.');
+    return;
+  }
+
+  setGoogleButtonLoading(true);
+  var cfgPromise = authConfig.google_client_id ? Promise.resolve(authConfig) : loadAuthConfig();
+  cfgPromise
+    .then(function(cfg) {
+      var clientId = cfg && cfg.google_client_id ? String(cfg.google_client_id).trim() : '';
+      if (!clientId) {
+        setGoogleButtonLoading(false);
+        showAuthError('Google Sign-In is not configured on this server yet.');
+        return;
+      }
+      window.VoclNative.startGoogleSignIn(clientId);
+    })
+    .catch(function() {
+      setGoogleButtonLoading(false);
+      showAuthError('Could not reach the Vocl backend. Check your connection and retry.');
+    });
 }
 
 function submitSupabaseAuth(mode) {
+  showAuthError('');
   var email = (document.getElementById('email-input').value || '').trim();
   var password = document.getElementById('password-input').value || '';
   if (!email || password.length < 6) {
-    showToast('Enter a valid email and 6+ char password');
+    showAuthError('Enter a valid email and a password with at least 6 characters.');
     return;
   }
   if (!authConfig.supabase_url || !authConfig.supabase_key) {
-    showToast('Supabase Auth is not configured on this backend');
+    showAuthError('Email sign-in is not configured on this backend.');
     return;
   }
 
-  setAuthButtonsDisabled(true);
+  setEmailButtonsDisabled(true);
   var endpoint = mode === 'signup' ? '/auth/v1/signup' : '/auth/v1/token?grant_type=password';
   voclSupabaseAuthPost(authConfig.supabase_url, authConfig.supabase_key, endpoint, {
     email: email,
@@ -157,39 +223,11 @@ function submitSupabaseAuth(mode) {
       navigateTo('drills.html');
     })
     .catch(function(err) {
-      showToast(err && err.message ? err.message : 'Authentication failed');
+      showAuthError(err && err.message ? err.message : 'Authentication failed.');
     })
     .finally(function() {
-      setAuthButtonsDisabled(false);
+      setEmailButtonsDisabled(false);
     });
-}
-
-function signInAsLocalDev() {
-  var btn = document.getElementById('dev-btn');
-  btn.disabled = true;
-  btn.textContent = 'Signing in…';
-
-  voclApiJson('/api/auth/dev-login', 'POST', {
-    email: 'yogesh@vocl.local',
-    name: 'Yogesh Mali'
-  })
-    .then(function(data) {
-      if (!data || !data.access_token) throw new Error('Missing access_token');
-      saveAuthToken(data.access_token);
-      if (data.user) {
-        localStorage.setItem('voclUser', JSON.stringify(data.user));
-      }
-      navigateTo('drills.html');
-    })
-    .catch(function() {
-      showToast('Sign-in failed — check backend connection');
-      btn.disabled = false;
-      btn.textContent = 'Continue as Local Dev';
-    });
-}
-
-function signInWithGoogle() {
-  showToast('Enable Google OAuth in Supabase Auth to use Google Sign-In');
 }
 </script>
 </body>

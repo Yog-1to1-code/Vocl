@@ -179,7 +179,8 @@ def test_daily_quota_enforcement_4429_and_date_reset(isolated_phase1_db: Path) -
 def test_auth_config_exposes_supabase_public_settings(isolated_phase1_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(config.settings, "SUPABASE_URL", "https://example.supabase.co")
     monkeypatch.setattr(config.settings, "SUPABASE_PUBLISHABLE_KEY", "sb_publishable_test_key")
-    monkeypatch.setattr(config.settings, "DEV_AUTH_BYPASS", True)
+    monkeypatch.setattr(config.settings, "GOOGLE_CLIENT_ID", "test-client-id.apps.googleusercontent.com")
+    monkeypatch.setattr(config.settings, "DEV_AUTH_BYPASS", False)
 
     with TestClient(app) as client:
         resp = client.get("/api/auth/config")
@@ -187,7 +188,8 @@ def test_auth_config_exposes_supabase_public_settings(isolated_phase1_db: Path, 
         assert resp.json() == {
             "supabase_url": "https://example.supabase.co",
             "supabase_key": "sb_publishable_test_key",
-            "dev_auth_bypass": True,
+            "google_client_id": "test-client-id.apps.googleusercontent.com",
+            "dev_auth_bypass": False,
         }
 
 
