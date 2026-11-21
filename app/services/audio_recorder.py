@@ -124,7 +124,7 @@ class SessionAudioRecorder:
         return out_path
 
     async def save_recording(self) -> Path | None:
-        """Write Opus .ogg (24 kbps) via ffmpeg when available, falling back to .wav."""
+        """Downmix to 8 kbps mono 16 kHz VoIP Opus (.ogg) via ffmpeg, falling back to .wav."""
         wav_path = self.save_stereo_wav()
         if wav_path is None:
             return None
@@ -141,12 +141,20 @@ class SessionAudioRecorder:
                 "-y",
                 "-i",
                 str(wav_path),
+                "-ac",
+                "1",
+                "-ar",
+                "16000",
                 "-c:a",
                 "libopus",
                 "-b:a",
-                "24k",
+                "8k",
                 "-vbr",
                 "on",
+                "-application",
+                "voip",
+                "-compression_level",
+                "10",
                 str(ogg_path),
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.PIPE,
@@ -154,7 +162,7 @@ class SessionAudioRecorder:
             _, stderr = await asyncio.wait_for(proc.communicate(), timeout=30.0)
             if proc.returncode == 0 and ogg_path.exists() and ogg_path.stat().st_size > 0:
                 wav_path.unlink(missing_ok=True)
-                logger.info("Compressed recording to Opus: %s (%d bytes)", ogg_path, ogg_path.stat().st_size)
+                logger.info("Compressed recording to 8kbps mono Opus: %s (%d bytes)", ogg_path, ogg_path.stat().st_size)
                 return ogg_path
             logger.warning("ffmpeg exited %s; keeping WAV fallback: %s", proc.returncode, stderr.decode(errors="ignore")[:200])
         except Exception:

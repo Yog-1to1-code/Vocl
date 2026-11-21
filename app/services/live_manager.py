@@ -8,6 +8,7 @@ import sys
 import time
 from array import array
 from dataclasses import dataclass, field
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi import WebSocket
@@ -33,8 +34,10 @@ from app.services.reasoning_engine import (
     is_timeout_evaluation,
 )
 from app.services.audio_recorder import SessionAudioRecorder
+from app.services.gdrive_uploader import upload_and_cleanup_session_audio
 
 logger = logging.getLogger(__name__)
+_UPLOAD_TASKS: set[asyncio.Task] = set()
 
 _UPSTREAM_MIME = f"audio/pcm;rate={UPSTREAM_SAMPLE_RATE}"
 _FINAL_TRANSCRIPT_CHARS = 1200
@@ -356,7 +359,16 @@ class LiveSessionManager(SessionBridge):
             # Fallback when live final grading did not return and no tool call fired
             transcript = "".join(self.state.candidate_transcript)[-_FINAL_TRANSCRIPT_CHARS:]
             evaluations = [await evaluate_candidate_approach(self.problem, f"Candidate said: {transcript}")]
-        return await self._persist_and_send_autopsy(ws, evaluations)
+        autopsy = await self._persist_and_send_autopsy(ws, evaluations)
+        if self.state.audio_path:
+            local_file = Path(self.state.audio_path)
+            if local_file.is_file():
+                upload_task = asyncio.create_task(
+                    upload_and_cleanup_session_audio(self.state.session_id, self.state.problem_id, local_file)
+                )
+                _UPLOAD_TASKS.add(upload_task)
+                upload_task.add_done_callback(_UPLOAD_TASKS.discard)
+        return autopsy
 
     async def _request_final_live_grade(self, session) -> None:
         """Ask the active Gemini Live session for a rubric evaluation before teardown."""

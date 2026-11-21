@@ -347,73 +347,6 @@
       font-weight: 700;
       color: var(--green);
     }
-
-    .audio-bar {
-      display: none;
-      align-items: center;
-      gap: 12px;
-      padding: 12px 14px;
-      border-radius: 14px;
-      background: #08080A;
-      border: 1px solid var(--surface-border);
-    }
-
-    .audio-bar.visible {
-      display: flex;
-    }
-
-    .audio-play-btn {
-      width: 38px;
-      height: 38px;
-      border-radius: 9999px;
-      border: none;
-      background: var(--green);
-      color: #000000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      cursor: pointer;
-    }
-
-    .audio-play-btn:disabled {
-      opacity: 0.55;
-    }
-
-    .audio-mid {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .audio-top-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-    }
-
-    .audio-label {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      color: var(--muted);
-      text-transform: uppercase;
-    }
-
-    .audio-time {
-      font-size: 11px;
-      color: #E5E5EA;
-    }
-
-    .audio-scrub {
-      width: 100%;
-      accent-color: var(--green);
-      height: 4px;
-      cursor: pointer;
-    }
   </style>
   <script src="js/vocl-bridge.js"></script>
 </head>
@@ -480,20 +413,6 @@
             <span class="comp-label">Optimal target</span>
             <span class="comp-val optimal mono" id="optimal-complexity">—</span>
             <span class="comp-sub">reference bound</span>
-          </div>
-        </div>
-
-        <div class="audio-bar" id="audio-bar">
-          <button type="button" class="audio-play-btn" id="audio-play-btn" onclick="toggleAutopsyAudio()" aria-label="Play autopsy audio">
-            <svg id="audio-icon-play" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
-            <svg id="audio-icon-pause" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" style="display:none;"><line x1="9" y1="5" x2="9" y2="19"></line><line x1="15" y1="5" x2="15" y2="19"></line></svg>
-          </button>
-          <div class="audio-mid">
-            <div class="audio-top-row">
-              <span class="audio-label mono" id="audio-label">AUTOPSY AUDIO</span>
-              <span class="audio-time mono" id="audio-time">00:00 / 00:00</span>
-            </div>
-            <input type="range" class="audio-scrub" id="audio-scrub" min="0" max="100" value="0" step="0.1" oninput="scrubAutopsyAudio(this.value)">
           </div>
         </div>
 
@@ -564,97 +483,9 @@
     var allSessions = [];
     var problemsById = {};
     var selectedIndex = -1;
-    var activeAudioEl = null;
-    var loadedAudioSessionId = null;
 
     function lookupProblem(problemId) {
       return problemsById[problemId] || getFallbackProblemById(problemId);
-    }
-
-    function formatClock(sec) {
-      var s = Math.max(0, Math.floor(sec || 0));
-      var m = String(Math.floor(s / 60)).padStart(2, '0');
-      var r = String(s % 60).padStart(2, '0');
-      return m + ':' + r;
-    }
-
-    function resetAudioPlayer(session) {
-      if (activeAudioEl) {
-        try { activeAudioEl.pause(); } catch (e) {}
-        activeAudioEl = null;
-      }
-      loadedAudioSessionId = null;
-      var bar = document.getElementById('audio-bar');
-      var playIcon = document.getElementById('audio-icon-play');
-      var pauseIcon = document.getElementById('audio-icon-pause');
-      playIcon.style.display = 'block';
-      pauseIcon.style.display = 'none';
-      document.getElementById('audio-scrub').value = 0;
-      document.getElementById('audio-label').textContent = 'AUTOPSY AUDIO';
-      document.getElementById('audio-time').textContent = '00:00 / ' + formatClock(session && session.duration_sec);
-      bar.classList.toggle('visible', Boolean(session && session.audio_path && session.session_id));
-    }
-
-    function updateAudioUi() {
-      if (!activeAudioEl) return;
-      var dur = isFinite(activeAudioEl.duration) && activeAudioEl.duration > 0 ? activeAudioEl.duration : 0;
-      var cur = activeAudioEl.currentTime || 0;
-      document.getElementById('audio-time').textContent = formatClock(cur) + ' / ' + formatClock(dur);
-      if (dur > 0) {
-        document.getElementById('audio-scrub').value = String((cur / dur) * 100);
-      }
-      var playing = !activeAudioEl.paused && !activeAudioEl.ended;
-      document.getElementById('audio-icon-play').style.display = playing ? 'none' : 'block';
-      document.getElementById('audio-icon-pause').style.display = playing ? 'block' : 'none';
-    }
-
-    function scrubAutopsyAudio(pct) {
-      if (!activeAudioEl || !isFinite(activeAudioEl.duration) || activeAudioEl.duration <= 0) return;
-      activeAudioEl.currentTime = (parseFloat(pct) / 100) * activeAudioEl.duration;
-      updateAudioUi();
-    }
-
-    function toggleAutopsyAudio() {
-      var session = allSessions[selectedIndex];
-      if (!session || !session.session_id) return;
-
-      if (activeAudioEl && loadedAudioSessionId === session.session_id) {
-        if (activeAudioEl.paused) {
-          activeAudioEl.play().catch(function () {});
-        } else {
-          activeAudioEl.pause();
-        }
-        updateAudioUi();
-        return;
-      }
-
-      var btn = document.getElementById('audio-play-btn');
-      var label = document.getElementById('audio-label');
-      btn.disabled = true;
-      label.textContent = 'LOADING AUDIO…';
-
-      voclFetchAudioSrc('/api/sessions/' + encodeURIComponent(session.session_id) + '/audio')
-        .then(function (src) {
-          var audio = new Audio(src);
-          activeAudioEl = audio;
-          loadedAudioSessionId = session.session_id;
-          audio.addEventListener('timeupdate', updateAudioUi);
-          audio.addEventListener('loadedmetadata', updateAudioUi);
-          audio.addEventListener('ended', updateAudioUi);
-          audio.addEventListener('pause', updateAudioUi);
-          audio.addEventListener('play', updateAudioUi);
-          label.textContent = 'AUTOPSY AUDIO';
-          btn.disabled = false;
-          return audio.play();
-        })
-        .then(function () {
-          updateAudioUi();
-        })
-        .catch(function () {
-          btn.disabled = false;
-          label.textContent = 'AUDIO UNAVAILABLE';
-          showToast('Recording unavailable');
-        });
     }
 
     function normalizeScore(raw) {
@@ -701,7 +532,6 @@
 
       document.getElementById('your-complexity').textContent = session.final_complexity || 'Not evaluated';
       document.getElementById('optimal-complexity').textContent = prob ? prob.optimal_complexity : 'O(N)';
-      resetAudioPlayer(session);
 
       var edges = parseEdgeCases(session.missed_edge_cases);
       var edgeCard = document.getElementById('edge-cases-card');

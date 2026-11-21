@@ -36,6 +36,11 @@ GOOGLE_CLIENT_ID: str = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
 DEV_AUTH_BYPASS: bool = _read_bool("DEV_AUTH_BYPASS", "false")
 DAILY_QUOTA_MINUTES: float = float(os.environ.get("DAILY_QUOTA_MINUTES", "15.0"))
 
+GDRIVE_CLIENT_ID: str = os.environ.get("GDRIVE_CLIENT_ID", "").strip()
+GDRIVE_CLIENT_SECRET: str = os.environ.get("GDRIVE_CLIENT_SECRET", "").strip()
+GDRIVE_REFRESH_TOKEN: str = os.environ.get("GDRIVE_REFRESH_TOKEN", "").strip()
+GDRIVE_FOLDER_ID: str = os.environ.get("GDRIVE_FOLDER_ID", "").strip()
+
 UPSTREAM_SAMPLE_RATE: int = 16000  # Gemini Live requires 16kHz mono PCM upstream
 DOWNSTREAM_SAMPLE_RATE: int = 24000  # Gemini Live emits 24kHz mono PCM
 

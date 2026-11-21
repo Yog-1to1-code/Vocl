@@ -250,10 +250,18 @@ async def list_user_sessions(user_id: str) -> list[dict]:
                 "grading_source": r.grading_source,
                 "missed_edge_cases": json.loads(r.missed_edge_cases_json or "[]"),
                 "summary_feedback": r.summary_feedback,
-                "audio_path": r.audio_path,
             }
             for r in rows
         ]
+
+
+async def update_session_audio_path(session_id: str, audio_path: str) -> None:
+    factory = get_session_factory()
+    async with factory() as db:
+        row = await db.get(SessionRecord, session_id)
+        if row is not None:
+            row.audio_path = audio_path
+            await db.commit()
 
 
 async def clear_user_sessions(user_id: str) -> None:
